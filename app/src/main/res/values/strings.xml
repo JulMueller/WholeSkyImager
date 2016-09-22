@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">WholeSkyImager</string>
+    <string name="main_label">Canny Edge Detector Test (T1 = 70, T2 = 100)</string>
+</resources>
