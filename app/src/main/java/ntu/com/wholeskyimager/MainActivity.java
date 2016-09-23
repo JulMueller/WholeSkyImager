@@ -1,5 +1,6 @@
 package ntu.com.wholeskyimager;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
@@ -85,5 +86,47 @@ public class MainActivity extends AppCompatActivity  {
     public void importImage(View view) {
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
+        //intent for camera
+        Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+        startActivityForResult(intent,0);
+    }
+
+    //camera part
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // TODO Auto-generated method stub
+        super.onActivityResult(requestCode, resultCode, data);
+        /*
+        Camera cam = Camera.open();
+        public double getHVA() {
+            return camera.getParameters().getHorizontalViewAngle();
+        }
+        public double getVVA() {
+            return camera.getParameters().getVerticalViewAngle();
+        }
+        */
+        Bitmap bp = (Bitmap) data.getExtras().get("data");
+        outputImage.setImageBitmap(bp);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
     }
 }
+
+/*
+public class Showcamera extends SurfaceView implements SurfaceHolder.Callback {
+    private Camera theCamera;
+
+    public void surfaceCreated(SurfaceHolder holder) {
+        theCamera.setPreviewDisplay(holder);
+        theCamera.startPreview();
+    }
+
+    public void surfaceChanged(SurfaceHolder arg0, int arg1, int arg2, int arg3){
+    }
+
+    public void surfaceDestroyed(SurfaceHolder arg0) {
+    }
+}
+*/
