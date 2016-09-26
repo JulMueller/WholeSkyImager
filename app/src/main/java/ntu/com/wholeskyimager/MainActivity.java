@@ -1,12 +1,21 @@
 package ntu.com.wholeskyimager;
 
+import android.content.pm.ActivityInfo;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.hardware.Camera; //camera
+import android.hardware.Camera.PictureCallback;
 import android.graphics.drawable.Drawable;
 import android.media.Image;
+import android.net.Uri;
+import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.content.Context;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -15,32 +24,72 @@ import org.opencv.imgproc.Imgproc;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.view.View.OnClickListener;
+import android.graphics.Bitmap;
+import android.hardware.Camera;
+import android.hardware.Camera.PictureCallback;
+import android.hardware.Camera.ShutterCallback;
+import android.widget.Toast;
+
+import com.google.android.gms.appindexing.Action;
+import com.google.android.gms.appindexing.AppIndex;
+import com.google.android.gms.appindexing.Thing;
+import com.google.android.gms.common.api.GoogleApiClient;
 
 import java.io.File;
 
-public class MainActivity extends AppCompatActivity  {
+public class MainActivity extends AppCompatActivity {
+
+    private ImageSurfaceView mImageSurfaceView;
+    private Camera camera;
 
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel;
     protected ImageView inputImage;
     protected ImageView outputImage;
+    private FrameLayout cameraPreviewLayout;
+    /**
+     * ATTENTION: This was auto-generated to implement the App Indexing API.
+     * See https://g.co/AppIndexing/AndroidStudio for more information.
+     */
+    private GoogleApiClient mClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-        // Connect interface elements to properties
+        cameraPreviewLayout = (FrameLayout)findViewById(R.id.camera_preview);
+
+        //Connect interface elements to properties
         loadImage = (Button) findViewById(R.id.buttonImport);
         startEdgeDetection = (Button) findViewById(R.id.buttonEdgeDetect);
         mainLabel = (TextView) findViewById(R.id.textView);
-        inputImage = (ImageView) findViewById(R.id.imageInput);
+        //inputImage = (ImageView) findViewById(R.id.imageInput);
         outputImage = (ImageView) findViewById(R.id.imageOutput);
+        //inputImage.setVisibility(View.VISIBLE);
 
+
+        //from Tutorial
+        camera = checkDeviceCamera();
+        mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
+        cameraPreviewLayout = (FrameLayout)findViewById(R.id.camera_preview);
+        cameraPreviewLayout.addView(mImageSurfaceView);
+
+        double horAngle =  getHVA();
+        double vertAngle = getVVA();
+        String horAngleS = String.valueOf(horAngle);
+        String vertAngleS = String.valueOf(vertAngle);
+        Log.e("Camera horAngle: ", horAngleS);
+        Log.e("Camera vertAngle: ", vertAngleS);
+
+        //cameraPreviewLayout.addView(mImageSurfaceView);
 
         //Check if OpenCV works properly
         if (!OpenCVLoader.initDebug()) {
@@ -49,6 +98,52 @@ public class MainActivity extends AppCompatActivity  {
             Log.d(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), working.");
         }
 
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        mClient = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+    }
+
+    //check if cam is available
+    private Camera checkDeviceCamera(){
+        Camera mCamera = null;
+        try {
+            mCamera = Camera.open();
+            Log.e(this.getClass().getSimpleName(), "Camera opened successfully!");
+            //String horAngleS = String.valueOf(horAngle);
+            //Log.e("Camera horAngle: ", horAngleS);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e(this.getClass().getSimpleName(), "Could not start camera");
+        }
+        return mCamera;
+    }
+
+    //get FOV parameter
+    public double getHVA() {
+        return camera.getParameters().getHorizontalViewAngle();
+    }
+    public double getVVA() {
+        return camera.getParameters().getVerticalViewAngle();
+    }
+
+
+    //Picture Callback Method
+    PictureCallback pictureCallback = new PictureCallback() {
+        @Override
+        public void onPictureTaken(byte[] data, Camera camera) {
+            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+            if(bitmap==null){
+                Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
+                return;
+            }
+            outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300 ));
+            outputImage.setRotation(90);
+        }
+    };
+
+    private Bitmap scaleDownBitmapImage(Bitmap bitmap, int newWidth, int newHeight){
+        Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
+        return resizedBitmap;
     }
 
     public void startEdgeDetection(View view) {
@@ -56,54 +151,46 @@ public class MainActivity extends AppCompatActivity  {
         Log.d("Button Pressed", "Edge detection should be started!");
 
         //File organization
-        String inputFileName="NTU_1_GS";
+        String inputFileName = "NTU_1_GS";
         String inputExtension = "png";
         String inputDir = getCacheDir().getAbsolutePath();  // use the cache directory for i/o
         String outputDir = getCacheDir().getAbsolutePath();
         String outputExtension = "png";
         String inputFilePath = inputDir + File.separator + inputFileName + "." + inputExtension;
 
-        Log.d (this.getClass().getSimpleName(), "loading " + inputFilePath + "...");
+        Log.d(this.getClass().getSimpleName(), "loading " + inputFilePath + "...");
         Mat image = Imgcodecs.imread(inputFilePath);
-        Log.d (this.getClass().getSimpleName(), "width of " + inputFileName + ": " + image.width());
-        // if width is 0 then it did not read your image.
+        Log.d(this.getClass().getSimpleName(), "width of " + inputFileName + ": " + image.width());
 
         int threshold1 = 50;
         int threshold2 = 100;
 
-        Mat im_canny = new Mat();  // you have to initialize output image before giving it to the Canny method
+        Mat im_canny = new Mat();
         Imgproc.Canny(image, im_canny, threshold1, threshold2);
         String cannyFilename = outputDir + File.separator + inputFileName + "_canny-" + threshold1 + "-" + threshold2 + "." + outputExtension;
-        Log.d (this.getClass().getSimpleName(), "Writing " + cannyFilename);
+        Log.d(this.getClass().getSimpleName(), "Writing " + cannyFilename);
         Imgcodecs.imwrite(cannyFilename, im_canny);
         //inputImage.setImageResource(R.drawable.my_image);
         Bitmap bitmapToDisplay = null;
         bitmapToDisplay = BitmapFactory.decodeFile(cannyFilename);
         outputImage.setImageBitmap(BitmapFactory.decodeFile(cannyFilename));
-        outputImage.getLayoutParams().width = inputImage.getWidth();
+        //outputImage.getLayoutParams().width = inputImage.getWidth();
         Log.d("Statusupdate", "Edge detection finished");
     }
+
     public void importImage(View view) {
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
         //intent for camera
-        Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-        startActivityForResult(intent,0);
+        //Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        //startActivityForResult(intent, 0);
+        camera.takePicture(null, null, pictureCallback);
     }
 
     //camera part
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         // TODO Auto-generated method stub
         super.onActivityResult(requestCode, resultCode, data);
-        /*
-        Camera cam = Camera.open();
-        public double getHVA() {
-            return camera.getParameters().getHorizontalViewAngle();
-        }
-        public double getVVA() {
-            return camera.getParameters().getVerticalViewAngle();
-        }
-        */
         Bitmap bp = (Bitmap) data.getExtras().get("data");
         outputImage.setImageBitmap(bp);
     }
@@ -111,6 +198,42 @@ public class MainActivity extends AppCompatActivity  {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+    }
+
+    /**
+     * ATTENTION: This was auto-generated to implement the App Indexing API.
+     * See https://g.co/AppIndexing/AndroidStudio for more information.
+     */
+    public Action getIndexApiAction() {
+        Thing object = new Thing.Builder()
+                .setName("Main Page") // TODO: Define a title for the content shown.
+                // TODO: Make sure this auto-generated URL is correct.
+                .setUrl(Uri.parse("http://[ENTER-YOUR-URL-HERE]"))
+                .build();
+        return new Action.Builder(Action.TYPE_VIEW)
+                .setObject(object)
+                .setActionStatus(Action.STATUS_TYPE_COMPLETED)
+                .build();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        mClient.connect();
+        AppIndex.AppIndexApi.start(mClient, getIndexApiAction());
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        AppIndex.AppIndexApi.end(mClient, getIndexApiAction());
+        mClient.disconnect();
     }
 }
 
