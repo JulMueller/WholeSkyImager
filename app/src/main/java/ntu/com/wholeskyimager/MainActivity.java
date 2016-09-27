@@ -6,15 +6,9 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.hardware.Camera; //camera
 import android.hardware.Camera.PictureCallback;
-import android.graphics.drawable.Drawable;
-import android.media.Image;
 import android.net.Uri;
-import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.content.Context;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
 
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
@@ -28,12 +22,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.view.View.OnClickListener;
-import android.graphics.Bitmap;
-import android.hardware.Camera;
-import android.hardware.Camera.PictureCallback;
-import android.hardware.Camera.ShutterCallback;
-import android.widget.Toast;
 
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
@@ -41,6 +29,11 @@ import com.google.android.gms.appindexing.Thing;
 import com.google.android.gms.common.api.GoogleApiClient;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -103,11 +96,14 @@ public class MainActivity extends AppCompatActivity {
         mClient = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
     }
 
+
+
     //check if cam is available
     private Camera checkDeviceCamera(){
+        int cameraId = findBackFacingCamera();
         Camera mCamera = null;
         try {
-            mCamera = Camera.open();
+            mCamera = Camera.open(cameraId);
             Log.e(this.getClass().getSimpleName(), "Camera opened successfully!");
             //String horAngleS = String.valueOf(horAngle);
             //Log.e("Camera horAngle: ", horAngleS);
@@ -116,6 +112,23 @@ public class MainActivity extends AppCompatActivity {
             Log.e(this.getClass().getSimpleName(), "Could not start camera");
         }
         return mCamera;
+    }
+
+    private int findBackFacingCamera() {
+        int cameraId = -1;
+        //Search for the back facing camera
+        //get the number of cameras
+        int numberOfCameras = Camera.getNumberOfCameras();
+        //for every camera check
+        for (int i = 0; i < numberOfCameras; i++) {
+            Camera.CameraInfo info = new Camera.CameraInfo();
+            Camera.getCameraInfo(i, info);
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_BACK) {
+                cameraId = i;
+                break;
+            }
+        }
+        return cameraId;
     }
 
     //get FOV parameter
@@ -136,6 +149,21 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
                 return;
             }
+            File pictureFile = getOutputMediaFile();
+            if (pictureFile == null) {
+                return;
+            }
+            try {
+                //write the file
+                FileOutputStream fos = new FileOutputStream(pictureFile);
+                fos.write(data);
+                fos.close();
+                Toast toast = Toast.makeText(MainActivity.this, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
+                toast.show();
+
+            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
+             }
             outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300 ));
             outputImage.setRotation(90);
         }
@@ -146,6 +174,7 @@ public class MainActivity extends AppCompatActivity {
         return resizedBitmap;
     }
 
+    //button method
     public void startEdgeDetection(View view) {
         //do something
         Log.d("Button Pressed", "Edge detection should be started!");
@@ -178,6 +207,7 @@ public class MainActivity extends AppCompatActivity {
         Log.d("Statusupdate", "Edge detection finished");
     }
 
+    //button method
     public void importImage(View view) {
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
@@ -195,6 +225,28 @@ public class MainActivity extends AppCompatActivity {
         outputImage.setImageBitmap(bp);
     }
 
+    //write file method
+    private static File getOutputMediaFile() {
+        //make a new file directory inside the "sdcard" folder
+        File mediaStorageDir = new File("/sdcard/", "WSI");
+
+        //if this "JCGCamera folder does not exist
+        if (!mediaStorageDir.exists()) {
+            //if you cannot make this folder return
+            if (!mediaStorageDir.mkdirs()) {
+                return null;
+            }
+        }
+
+        //take the current timeStamp
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        File mediaFile;
+        //and make a media file:
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + "IMG_" + timeStamp + ".jpg");
+
+        return mediaFile;
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -208,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
         Thing object = new Thing.Builder()
                 .setName("Main Page") // TODO: Define a title for the content shown.
                 // TODO: Make sure this auto-generated URL is correct.
-                .setUrl(Uri.parse("http://[ENTER-YOUR-URL-HERE]"))
+                .setUrl(Uri.parse("http://www.wholesky.ch"))
                 .build();
         return new Action.Builder(Action.TYPE_VIEW)
                 .setObject(object)
