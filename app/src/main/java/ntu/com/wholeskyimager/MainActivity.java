@@ -1,3 +1,7 @@
+/**
+ * @author Julian Mueller
+ *
+ */
 package ntu.com.wholeskyimager;
 
 import android.content.pm.ActivityInfo;
@@ -34,7 +38,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 
+/**
+ * Application entry point lol
+ *
+ * @param args array of command-line arguments passed to this method
+*/
 public class MainActivity extends AppCompatActivity {
 
     private ImageSurfaceView mImageSurfaceView;
@@ -58,29 +68,28 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-        cameraPreviewLayout = (FrameLayout)findViewById(R.id.camera_preview);
-
         //Connect interface elements to properties
         loadImage = (Button) findViewById(R.id.buttonImport);
         startEdgeDetection = (Button) findViewById(R.id.buttonEdgeDetect);
         mainLabel = (TextView) findViewById(R.id.textView);
         //inputImage = (ImageView) findViewById(R.id.imageInput);
         outputImage = (ImageView) findViewById(R.id.imageOutput);
-        //inputImage.setVisibility(View.VISIBLE);
-
 
         //from Tutorial
         camera = checkDeviceCamera();
+
         mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
         cameraPreviewLayout = (FrameLayout)findViewById(R.id.camera_preview);
         cameraPreviewLayout.addView(mImageSurfaceView);
 
+        /*
         double horAngle =  getHVA();
         double vertAngle = getVVA();
         String horAngleS = String.valueOf(horAngle);
         String vertAngleS = String.valueOf(vertAngle);
         Log.e("Camera horAngle: ", horAngleS);
         Log.e("Camera vertAngle: ", vertAngleS);
+        */
 
         //cameraPreviewLayout.addView(mImageSurfaceView);
 
@@ -96,24 +105,75 @@ public class MainActivity extends AppCompatActivity {
         mClient = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
     }
 
-
-
-    //check if cam is available
+    //check if cam is available and use back facing camera
     private Camera checkDeviceCamera(){
         int cameraId = findBackFacingCamera();
         Camera mCamera = null;
         try {
-            mCamera = Camera.open(cameraId);
+            mCamera = Camera.open(cameraId);  //try to open camera
+            Camera.Parameters params = mCamera.getParameters();
+            List<Camera.Size> sizes = params.getSupportedPictureSizes();
+            Camera.Size size = sizes.get(0);
+            //Camera.Size size1 = sizes.get(0);
+            //find largest size
+            for(int i=0;i<sizes.size();i++)
+            {
+
+                if(sizes.get(i).width > size.width)
+                    size = sizes.get(i);
+            }
+            params.setPictureSize(size.width, size.height);
+            params.setRotation(90);
+            params.setJpegQuality(100);
+            // TODO: find Balance modes
+            params.setWhiteBalance(Camera.Parameters.WHITE_BALANCE_AUTO);
+            params.setFocusMode(Camera.Parameters.FOCUS_MODE_INFINITY);
+            params.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+            mCamera.setParameters(params);
             Log.e(this.getClass().getSimpleName(), "Camera opened successfully!");
-            //String horAngleS = String.valueOf(horAngle);
-            //Log.e("Camera horAngle: ", horAngleS);
         } catch (Exception e) {
-            e.printStackTrace();
+            e.printStackTrace(); //show error if camera can't be accessed
             Log.e(this.getClass().getSimpleName(), "Could not start camera");
         }
         return mCamera;
     }
 
+    //Picture Callback Method
+    PictureCallback pictureCallback = new PictureCallback() {
+        @Override
+        //action if picture is taken
+        public void onPictureTaken(byte[] data, Camera camera) {
+
+            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+            if(bitmap==null){
+                Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
+                return;
+            }
+            //actual image file: pictureFile
+            File pictureFile = getOutputMediaFile();
+            if (pictureFile == null) {
+                return;
+            }
+            try {
+                //write the file
+                FileOutputStream fos = new FileOutputStream(pictureFile);
+                fos.write(data);
+                fos.close();
+                Toast toast = Toast.makeText(MainActivity.this, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
+                toast.show();
+
+            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
+            }
+            outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300 ));
+            mImageSurfaceView.refreshCamera();
+            //outputImage.setRotation(90);
+        }
+    };
+    /**
+     * Find back facing camera
+     * @return cameraId
+     */
     private int findBackFacingCamera() {
         int cameraId = -1;
         //Search for the back facing camera
@@ -130,52 +190,32 @@ public class MainActivity extends AppCompatActivity {
         }
         return cameraId;
     }
-
-    //get FOV parameter
+    /**
+     * HVA Method
+     * @return horizontalViewAngle
+     */
     public double getHVA() {
         return camera.getParameters().getHorizontalViewAngle();
     }
+    /**
+     * VVA Method
+     * @return verticalViewAngle
+     */
     public double getVVA() {
         return camera.getParameters().getVerticalViewAngle();
     }
 
-
-    //Picture Callback Method
-    PictureCallback pictureCallback = new PictureCallback() {
-        @Override
-        public void onPictureTaken(byte[] data, Camera camera) {
-            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
-            if(bitmap==null){
-                Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
-                return;
-            }
-            File pictureFile = getOutputMediaFile();
-            if (pictureFile == null) {
-                return;
-            }
-            try {
-                //write the file
-                FileOutputStream fos = new FileOutputStream(pictureFile);
-                fos.write(data);
-                fos.close();
-                Toast toast = Toast.makeText(MainActivity.this, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
-                toast.show();
-
-            } catch (FileNotFoundException e) {
-            } catch (IOException e) {
-             }
-            outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300 ));
-            outputImage.setRotation(90);
-        }
-    };
 
     private Bitmap scaleDownBitmapImage(Bitmap bitmap, int newWidth, int newHeight){
         Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true);
         return resizedBitmap;
     }
 
+
     //button method
     public void startEdgeDetection(View view) {
+        //mImageSurfaceView.refreshCamera();
+        /*
         //do something
         Log.d("Button Pressed", "Edge detection should be started!");
 
@@ -205,15 +245,14 @@ public class MainActivity extends AppCompatActivity {
         outputImage.setImageBitmap(BitmapFactory.decodeFile(cannyFilename));
         //outputImage.getLayoutParams().width = inputImage.getWidth();
         Log.d("Statusupdate", "Edge detection finished");
+        */
     }
 
-    //button method
+
+    //button method (take picture)
     public void importImage(View view) {
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
-        //intent for camera
-        //Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        //startActivityForResult(intent, 0);
         camera.takePicture(null, null, pictureCallback);
     }
 
@@ -225,7 +264,7 @@ public class MainActivity extends AppCompatActivity {
         outputImage.setImageBitmap(bp);
     }
 
-    //write file method
+    //get picture data (no writing)
     private static File getOutputMediaFile() {
         //make a new file directory inside the "sdcard" folder
         File mediaStorageDir = new File("/sdcard/", "WSI");
@@ -234,6 +273,7 @@ public class MainActivity extends AppCompatActivity {
         if (!mediaStorageDir.exists()) {
             //if you cannot make this folder return
             if (!mediaStorageDir.mkdirs()) {
+                Log.d("WholeSkyImager", "failed to create directory");
                 return null;
             }
         }
@@ -287,21 +327,18 @@ public class MainActivity extends AppCompatActivity {
         AppIndex.AppIndexApi.end(mClient, getIndexApiAction());
         mClient.disconnect();
     }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        //releaseCamera();              // release the camera immediately on pause event
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        //releaseCamera();              // release the camera immediately on pause event
+    }
+
+
 }
-
-/*
-public class Showcamera extends SurfaceView implements SurfaceHolder.Callback {
-    private Camera theCamera;
-
-    public void surfaceCreated(SurfaceHolder holder) {
-        theCamera.setPreviewDisplay(holder);
-        theCamera.startPreview();
-    }
-
-    public void surfaceChanged(SurfaceHolder arg0, int arg1, int arg2, int arg3){
-    }
-
-    public void surfaceDestroyed(SurfaceHolder arg0) {
-    }
-}
-*/

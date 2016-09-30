@@ -68,7 +68,6 @@
             android:layout_height="15dp"
             android:id="@+id/imageSpacer"
             android:layout_gravity="center"
-            android:background="#FFFFFF"
             android:minHeight="100dp"
             android:minWidth="400dp"
             android:nestedScrollingEnabled="false"
