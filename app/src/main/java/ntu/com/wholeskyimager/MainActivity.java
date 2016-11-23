@@ -7,16 +7,24 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.hardware.Camera.PictureCallback;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.text.Html;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
@@ -32,7 +40,6 @@ import com.google.android.gms.appindexing.Thing;
 import com.google.android.gms.common.api.GoogleApiClient;
 
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Mat;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -41,12 +48,12 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.StringTokenizer;
 
-
+@SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
+    private static final int WAHRSIS_MODEL_NR = 5;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel;
@@ -55,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
     protected Switch hdrSwitch;
     protected SeekBar evSeekbar;
     private ImageSurfaceView mImageSurfaceView;
+
     //Picture Callback Method
     PictureCallback pictureCallback = new PictureCallback() {
         @Override
@@ -97,21 +105,12 @@ public class MainActivity extends AppCompatActivity {
      */
     private GoogleApiClient mClient;
 
-    public static void dumpParameters(Camera.Parameters parameters) {
-        String flattened = parameters.flatten();
-        StringTokenizer tokenizer = new StringTokenizer(flattened, ";");
-        Log.d(TAG, "Dump all camera parameters:");
-        while (tokenizer.hasMoreElements()) {
-            Log.d(TAG, tokenizer.nextToken());
-        }
-    }
-
-    //get picture data (no writing)
+    @Nullable //this denotes that the method might legitimately return null
     private static File getOutputMediaFile() {
         //make a new file directory inside the "sdcard" folder
         File mediaStorageDir = new File("/sdcard/", "WSI");
 
-        //if this "JCGCamera folder does not exist
+        //if folder could not be created
         if (!mediaStorageDir.exists()) {
             //if you cannot make this folder return
             if (!mediaStorageDir.mkdirs()) {
@@ -119,12 +118,14 @@ public class MainActivity extends AppCompatActivity {
                 return null;
             }
         }
-
+        //naming convention: 2016-11-22-14-20-01-wahrsis5.jpg
+        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg
         //take the current timeStamp
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+//        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
         File mediaFile;
         //and make a media file:
-        mediaFile = new File(mediaStorageDir.getPath() + File.separator + "IMG_" + timeStamp + ".jpg");
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + WAHRSIS_MODEL_NR + ".jpg");
 
         return mediaFile;
     }
@@ -134,20 +135,14 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        Toolbar myToolbar = (Toolbar) findViewById(R.id.my_toolbar);
-        setSupportActionBar(myToolbar);
 
-        //Connect interface elements to properties
-        loadImage = (Button) findViewById(R.id.buttonImport);
-        startEdgeDetection = (Button) findViewById(R.id.buttonEdgeDetect);
-        mainLabel = (TextView) findViewById(R.id.textView);
-        //inputImage = (ImageView) findViewById(R.id.imageInput);
+        setupActionBar();
+
         outputImage = (ImageView) findViewById(R.id.imageOutput);
         hdrSwitch = (Switch) findViewById(R.id.switchHDR);
         evSeekbar = (SeekBar) findViewById(R.id.seekBarEV);
 
         hdrSwitch.setChecked(false);
-
         hdrSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -159,18 +154,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        /*
-        evSeekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress,
-                                          boolean fromUser) {
-                // TODO Auto-generated method stub
-                exposureCompensationValue = progress;
-                Log.e(TAG, "Seekbar changed to: " + String.valueOf(progress));
-            }
-        });
-        */
 
         //from Tutorial
         camera = checkDeviceCamera();
@@ -206,8 +189,11 @@ public class MainActivity extends AppCompatActivity {
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu, menu);
+
         return true;
     }
+
+    //get picture data (no writing)
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
@@ -217,15 +203,19 @@ public class MainActivity extends AppCompatActivity {
         int id = item.getItemId();
         switch (item.getItemId()) {
             case R.id.action_settings:
-                Toast.makeText(MainActivity.this, "SETTINGS",
-                        Toast.LENGTH_SHORT).show();
-                //Intent intent = new Intent(this, DisplaySettingsAcitvity.class);
-                //startActivity(intent);
+                Toast.makeText(MainActivity.this, "SETTINGS", Toast.LENGTH_SHORT).show();
+                Intent intentSettings = new Intent(this, DisplayAboutActivity.class);
+                startActivity(intentSettings);
+                return true;
+
+            case R.id.action_help:
+                Toast.makeText(MainActivity.this, "HELP", Toast.LENGTH_SHORT).show();
                 return true;
 
             case R.id.action_about:
-                Toast.makeText(MainActivity.this, "ABOUT",
-                        Toast.LENGTH_SHORT).show();
+                Toast.makeText(MainActivity.this, "ABOUT", Toast.LENGTH_SHORT).show();
+                Intent intentAbout = new Intent(this, DisplayAboutActivity.class);
+                startActivity(intentAbout);
                 return true;
 
             default:
@@ -236,6 +226,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //check if cam is available and use back facing camera
+
+    /**
+     * Check avaiablity of camera
+     *
+     * @return Camera
+     */
+    @SuppressWarnings("deprecation")
     private Camera checkDeviceCamera() {
         int cameraId = findBackFacingCamera();
         Camera mCamera = null;
@@ -282,6 +279,7 @@ public class MainActivity extends AppCompatActivity {
      * Find back facing camera
      * @return cameraId
      */
+    @SuppressWarnings("deprecation")
     private int findBackFacingCamera() {
         int cameraId = -1;
         //Search for the back facing camera
@@ -322,51 +320,11 @@ public class MainActivity extends AppCompatActivity {
 
     //button method
     public void startEdgeDetection(View view) {
-        // Start OpenCV HDR Algo
-        /* native code:
 
-        Mat hdr;
-        Ptr<MergeDebevec> merge_debevec = createMergeDebevec();
-        merge_debevec->process(images, hdr, times, response);
-        */
-        Mat hdr;
-//        MergeDebevec
-
-        //mImageSurfaceView.refreshCamera();
-        /*
-        //do something
-        Log.d("Button Pressed", "Edge detection should be started!");
-
-        //File organization
-        String inputFileName = "NTU_1_GS";
-        String inputExtension = "png";
-        String inputDir = getCacheDir().getAbsolutePath();  // use the cache directory for i/o
-        String outputDir = getCacheDir().getAbsolutePath();
-        String outputExtension = "png";
-        String inputFilePath = inputDir + File.separator + inputFileName + "." + inputExtension;
-
-        Log.d(this.getClass().getSimpleName(), "loading " + inputFilePath + "...");
-        Mat image = Imgcodecs.imread(inputFilePath);
-        Log.d(this.getClass().getSimpleName(), "width of " + inputFileName + ": " + image.width());
-
-        int threshold1 = 50;
-        int threshold2 = 100;
-
-        Mat im_canny = new Mat();
-        Imgproc.Canny(image, im_canny, threshold1, threshold2);
-        String cannyFilename = outputDir + File.separator + inputFileName + "_canny-" + threshold1 + "-" + threshold2 + "." + outputExtension;
-        Log.d(this.getClass().getSimpleName(), "Writing " + cannyFilename);
-        Imgcodecs.imwrite(cannyFilename, im_canny);
-        //inputImage.setImageResource(R.drawable.my_image);
-        Bitmap bitmapToDisplay = null;
-        bitmapToDisplay = BitmapFactory.decodeFile(cannyFilename);
-        outputImage.setImageBitmap(BitmapFactory.decodeFile(cannyFilename));
-        //outputImage.getLayoutParams().width = inputImage.getWidth();
-        Log.d("Statusupdate", "Edge detection finished");
-        */
     }
 
     //button method (take picture)
+    @SuppressWarnings("deprecation")
     public void importImage(View view) throws InterruptedException {
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
@@ -403,6 +361,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
             Log.d(TAG, "Changed to auto mode");
+            camera.takePicture(null, null, pictureCallback);
         }
         //camera.setParameters(params);
         //dumpParameters(params);
@@ -471,5 +430,23 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
+    public void setupActionBar() {
+        Toolbar myToolbar = (Toolbar) findViewById(R.id.my_toolbar);
+        setSupportActionBar(myToolbar);
+        Drawable drawable = ContextCompat.getDrawable(getApplicationContext(), R.drawable.ic_more_vert_white_24dp);
+        myToolbar.setOverflowIcon(drawable);
+        android.support.v7.app.ActionBar menu = getSupportActionBar();
+        menu.setDisplayHomeAsUpEnabled(false);
+        menu.setLogo(R.mipmap.ic_launcher);
+        menu.setDisplayUseLogoEnabled(true);
+        menu.setBackgroundDrawable(new ColorDrawable(getResources().getColor(R.color.colorActionBar)));
+        menu.setTitle(Html.fromHtml("<font color='#ffffff'>Whole Sky Imager</font>"));
 
+        if (Build.VERSION.SDK_INT > 21) {
+            Window window = this.getWindow();
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            window.setStatusBarColor(ContextCompat.getColor(this, R.color.colorStatusBar));
+        }
+    }
 }

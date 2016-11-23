@@ -1,28 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingBottom="@dimen/activity_vertical_margin"
-    android:paddingLeft="@dimen/activity_horizontal_margin"
-    android:paddingRight="@dimen/activity_horizontal_margin"
-    android:paddingTop="@dimen/activity_vertical_margin"
     tools:context="ntu.com.wholeskyimager.MainActivity">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/main_label"
-        android:id="@+id/textView"/>
-
     <LinearLayout
-        android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/textView"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true">
+        android:layout_alignParentStart="true"
+        android:orientation="vertical">
+
+        <android.support.v7.widget.Toolbar
+            android:id="@+id/my_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorPrimary"
+            android:elevation="4dp"
+            android:theme="@style/ThemeOverlay.AppCompat.ActionBar"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+            app:titleMarginStart="20dp"/>
+
         <FrameLayout
             android:id="@+id/camera_preview"
             android:layout_width="match_parent"
@@ -44,49 +45,60 @@
             />
         -->
         <LinearLayout
-            android:orientation="horizontal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal">
+            android:layout_gravity="center_horizontal"
+            android:orientation="horizontal">
 
             <Button
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/button1_text"
                 android:id="@+id/buttonImport"
-                android:onClick="importImage"/>
-
-            <Button
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/button2_text"
+                android:onClick="importImage"
+                android:text="@string/button1_text"/>
+
+            <Button
                 android:id="@+id/buttonEdgeDetect"
-                android:onClick="startEdgeDetection"/>
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:onClick="startEdgeDetection"
+                android:text="@string/button2_text"/>
+
+            <Switch
+                android:id="@+id/switchHDR"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checked="false"
+                android:splitTrack="false"
+                android:text="HDR"/>
         </LinearLayout>
-        <ImageView
+
+        <SeekBar
+            android:id="@+id/seekBarEV"
+            style="@style/Widget.AppCompat.SeekBar.Discrete"
             android:layout_width="match_parent"
-            android:layout_height="15dp"
-            android:id="@+id/imageSpacer"
-            android:layout_gravity="center"
-            android:minHeight="100dp"
-            android:minWidth="400dp"
-            android:nestedScrollingEnabled="false"
-            android:adjustViewBounds="true"
-            android:maxHeight="150dp"
-            android:maxWidth="400dp"/>
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:layout_marginLeft="20dp"
+            android:layout_marginRight="20dp"
+            android:layout_marginTop="10dp"
+            android:max="2"
+            android:progress="1"
+            />
 
         <ImageView
+            android:id="@+id/imageOutput"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:id="@+id/imageOutput"
             android:layout_gravity="center"
+            android:adjustViewBounds="true"
             android:background="#cccccc"
+            android:maxHeight="150dp"
+            android:maxWidth="400dp"
             android:minHeight="100dp"
             android:minWidth="400dp"
-            android:nestedScrollingEnabled="false"
-            android:adjustViewBounds="true"
-            android:maxHeight="150dp"
-            android:maxWidth="400dp"/>
+            android:nestedScrollingEnabled="false"/>
 
 
 
