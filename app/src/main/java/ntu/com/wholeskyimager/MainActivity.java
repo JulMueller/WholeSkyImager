@@ -4,6 +4,7 @@
 package ntu.com.wholeskyimager;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -14,6 +15,7 @@ import android.hardware.Camera.PictureCallback;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -54,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private static final int WAHRSIS_MODEL_NR = 5;
+    private static int wahrsisModelNr = 5;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel;
@@ -61,8 +64,8 @@ public class MainActivity extends AppCompatActivity {
     protected ImageView outputImage;
     protected Switch hdrSwitch;
     protected SeekBar evSeekbar;
+    SharedPreferences sharedPref;
     private ImageSurfaceView mImageSurfaceView;
-
     //Picture Callback Method
     PictureCallback pictureCallback = new PictureCallback() {
         @Override
@@ -125,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
         String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
         File mediaFile;
         //and make a media file:
-        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + WAHRSIS_MODEL_NR + ".jpg");
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + wahrsisModelNr + ".jpg");
 
         return mediaFile;
     }
@@ -179,7 +182,8 @@ public class MainActivity extends AppCompatActivity {
         } else {
             Log.d(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), working.");
         }
-
+        // set preferences
+        getWSISettings();
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         mClient = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
@@ -204,8 +208,13 @@ public class MainActivity extends AppCompatActivity {
         switch (item.getItemId()) {
             case R.id.action_settings:
                 Toast.makeText(MainActivity.this, "SETTINGS", Toast.LENGTH_SHORT).show();
-                Intent intentSettings = new Intent(this, DisplayAboutActivity.class);
+                Intent intentSettings = new Intent(this, SettingsActivity.class);
                 startActivity(intentSettings);
+                return true;
+
+            case R.id.action_refresh:
+                getWSISettings();
+                Toast.makeText(MainActivity.this, "Refreshed Settings", Toast.LENGTH_SHORT).show();
                 return true;
 
             case R.id.action_help:
@@ -267,7 +276,7 @@ public class MainActivity extends AppCompatActivity {
 
             // save settings
             mCamera.setParameters(params);
-            Log.e(this.getClass().getSimpleName(), "Camera opened successfully!");
+            Log.d(this.getClass().getSimpleName(), "Camera started successfully.");
         } catch (Exception e) {
             e.printStackTrace(); //show error if camera can't be accessed
             Log.e(this.getClass().getSimpleName(), "Could not start camera");
@@ -447,6 +456,21 @@ public class MainActivity extends AppCompatActivity {
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
             window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
             window.setStatusBarColor(ContextCompat.getColor(this, R.color.colorStatusBar));
+        }
+    }
+
+    /**
+     * set up preferences
+     */
+    private void getWSISettings() {
+        sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+        String wahrsisNo = sharedPref.getString("settingsComment", "empty");
+        Log.d(TAG, "Comment: " + wahrsisNo);
+        Log.d(TAG, "Model Nr in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
+        // Set wahrsis model number according to settings activity
+        if (Integer.parseInt(sharedPref.getString("wahrsisNo", "0")) != 0) {
+            wahrsisModelNr = Integer.parseInt(sharedPref.getString("wahrsisNo", "404"));
+            Log.d(TAG, "Model Nr set to: " + wahrsisModelNr);
         }
     }
 }
