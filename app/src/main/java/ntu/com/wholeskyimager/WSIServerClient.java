@@ -88,7 +88,7 @@ public class WSIServerClient {
         client.post(clientUrl, params, new JsonHttpResponseHandler() {
             @Override
             public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
-                Log.d(TAG, "onSuccess, got JSON Object: " + response.toString());
+                Log.d(TAG, "AsyncHttpClient onSuccess onSuccess, got JSON Object: " + response.toString());
                 Log.d(TAG, "Http Status Code: " + statusCode);
                 httpStatusCode = statusCode;
             }
@@ -118,6 +118,7 @@ public class WSIServerClient {
 
         return httpStatusCode;
     }
+
 
     public int httpGET() {
         client.get(clientUrl, new JsonHttpResponseHandler() {

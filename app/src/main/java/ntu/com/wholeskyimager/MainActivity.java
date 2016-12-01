@@ -3,6 +3,10 @@
  */
 package ntu.com.wholeskyimager;
 
+import android.app.AlarmManager;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -18,12 +22,15 @@ import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CountDownTimer;
+import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.Html;
+import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -51,8 +58,11 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import static android.os.Build.VERSION_CODES.M;
 
@@ -61,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final String TAG = this.getClass().getName(); //gets the name of the current class eg. "MyActivity".
     private static int wahrsisModelNr = 5;
+    private int pictureInterval = 0;
     private boolean sPreviewing;
     protected Button loadImage;
     protected Button startEdgeDetection;
@@ -73,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
 
     WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
 
-    private boolean hdrModeOn;
+    private boolean hdrModeOn, connectionStatus, runImaging = true;
     private int exposureCompensationValue;
     private FrameLayout cameraPreviewLayout;
     /**
@@ -101,6 +112,24 @@ public class MainActivity extends AppCompatActivity {
         cameraPreviewLayout = (FrameLayout) findViewById(R.id.camera_preview);
         cameraPreviewLayout.addView(mImageSurfaceView);
 
+        NotificationManager notificationManager = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+
+        // prepare intent which is triggered if the notification is selected
+        Intent intent = new Intent(this, MainActivity.class);
+        PendingIntent pIntent = PendingIntent.getActivity(this, (int) System.currentTimeMillis(), intent, 0);
+
+        // build notification
+        Notification notificationUploadStarted  = new Notification.Builder(this)
+                .setContentTitle("Upload started")
+                .setContentText("Waiting for response code...")
+                .setSmallIcon(R.drawable.ic_sync_black_24dp)
+                .setContentIntent(pIntent)
+                .setAutoCancel(true).build();
+
+        //enable notification
+        notificationManager.notify(0, notificationUploadStarted);
+//        notificationManager.cancelAll();
+
         /*
         double horAngle =  getHVA();
         double vertAngle = getVVA();
@@ -120,6 +149,42 @@ public class MainActivity extends AppCompatActivity {
         getWSISettings();
         checkNetworkStatus();
         tvStatusInfo.setText("idle");
+
+        final Handler handler = new Handler();
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                try{
+                    if(runImaging) {
+                        Date d = new Date();
+                        CharSequence dateTime = DateFormat.format("yyyy-MM-dd hh:mm:ss", d.getTime());
+                        Log.d(TAG, "Runnable executed. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
+                    }
+                }
+                catch (Exception e) {
+                    // TODO: handle exception
+                    Log.d(TAG, "Error: Runnable exception.");
+                }
+                finally{
+                    //also call the same runnable to call it at regular interval
+                }
+                handler.postDelayed(this, pictureInterval*60*1000);
+            }
+        };
+        handler.post(runnable);
+
+        //timer setup
+//        new CountDownTimer(60000, 1000) {
+//
+//            public void onTick(long millisUntilFinished) {
+//                Log.d(TAG,"Seconds remaining: " + millisUntilFinished / 1000);
+//            }
+//
+//            public void onFinish() {
+//                Log.d(TAG, "Done");
+//            }
+//
+//        }.start();
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -335,12 +400,19 @@ public class MainActivity extends AppCompatActivity {
      * Button Method Upload Image
      */
     public void postData(View view) {
-        Toast.makeText(this, "POST execution started.", Toast.LENGTH_LONG).show();
-        //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
-        // TODO: replace name with global name
-        int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
-        Log.d(TAG, "POST execution finished. Response code: " + responseCode);
-
+        if (serverClient.isConnected()) {
+            Toast.makeText(this, "POST execution started.", Toast.LENGTH_LONG).show();
+            //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
+            // TODO: replace name with global name
+            int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
+            Log.d(TAG, "POST execution finished. Response code: " + responseCode);
+            if (responseCode == 201) {
+                tvStatusInfo.setText("Image uploaded.");
+            }
+        }
+        else {
+            Log.d(TAG, "POST Execution not possible. No connection to internet.");
+        }
         // for testing connection
 //        Toast.makeText(this, "HTTP GET execution started.", Toast.LENGTH_LONG).show();
 //        int responseCode = serverClient.httpGET();
@@ -441,7 +513,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        mImageSurfaceView.releaseCamera();
+//        mImageSurfaceView.releaseCamera();
         super.onPause();
 //        camera.stopPreview();
     }
@@ -494,11 +566,14 @@ public class MainActivity extends AppCompatActivity {
      */
     private void getWSISettings() {
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-        Log.d(TAG, "Model Nr in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
+
+        Log.d(TAG, "Model No. in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
         // Set wahrsis model number according to settings activity
         if (Integer.parseInt(sharedPref.getString("wahrsisNo", "0")) != 0) {
             wahrsisModelNr = Integer.parseInt(sharedPref.getString("wahrsisNo", "404"));
-            Log.d(TAG, "Model Nr set to: " + wahrsisModelNr);
+            Log.d(TAG, "Model No. set to: " + wahrsisModelNr);
         }
+        pictureInterval = Integer.parseInt(sharedPref.getString("picInterval", "404"));
+        Log.d(TAG, "Picture interval: " + pictureInterval + " min.");
     }
 }
