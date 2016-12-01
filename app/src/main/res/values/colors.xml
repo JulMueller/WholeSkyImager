@@ -6,5 +6,6 @@
     <color name="colorActionBar">#4F6CC9</color>
     <color name="colorStatusBar">#3551ac</color>
     <color name="white">#FFFFFF</color>
+    <color name="darkGreen">#008560</color>
 
 </resources>

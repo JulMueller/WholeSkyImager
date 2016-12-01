@@ -8,7 +8,7 @@
             android:defaultValue="5"
             android:key="wahrsisNo"
             android:singleLine="true"
-            android:summary="Please do not change"
+            android:summary="Should not be altered."
             android:title="WAHRSIS Number"/>
     </PreferenceCategory>
 
@@ -16,21 +16,31 @@
         <SwitchPreference
             android:defaultValue="false"
             android:key="createHDR"
-            android:summary="De Chräbi het gseid i muesses apasse!"
+            android:summary="Enable for HDR image creation on this phone."
             android:title="Create HDR Image"/>
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="realignImage"
+            android:summary="This option will cause images to be realigned automatically."
+            android:title="Rotate image"/>
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="storeLoc"
+            android:summary="Enable to store location and heading in EXIF."
+            android:title="Store location"/>
     </PreferenceCategory>
     <PreferenceCategory android:title="Networking"
         >
         <SwitchPreference
             android:defaultValue="false"
             android:key="uploadImages"
-            android:summary="Uploads Low, Med, High EV Images plus HDR depending on state of Create HDR Image switch"
+            android:summary="Uploads Low, Med, High EV Images plus HDR depending on state of Create HDR Image switch."
             android:title="Upload Images"
             />
         <EditTextPreference
             android:defaultValue="NULL"
             android:key="authorizationToken"
-            android:summary="Necessary for each new WAHRSIS"
+            android:summary="Necessary for each new WAHRSIS."
             android:title="Change Authorization Token"/>
     </PreferenceCategory>
 
@@ -38,18 +48,13 @@
         <SwitchPreference
             android:defaultValue="false"
             android:key="debugLogging"
-            android:summary="Enable Log Output through ADB"
+            android:summary="Enable Log Output through ADB."
             android:title="Logging"/>
         <SwitchPreference
             android:defaultValue="false"
             android:key="debugKeepfiles"
-            android:summary="Keep a copy of each image on the internal storage. WARNING: limited size."
+            android:summary="Keep a copy of each image on the internal storage."
             android:title="Keep Files"/>
-        <EditTextPreference
-            android:defaultValue="My Comment"
-            android:key="settingsComment"
-            android:summary="To test preference activity"
-            android:title="Comment"/>
     </PreferenceCategory>
 
 

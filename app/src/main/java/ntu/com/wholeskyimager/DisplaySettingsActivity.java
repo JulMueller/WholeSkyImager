@@ -12,10 +12,10 @@ public class DisplaySettingsActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_display_settings);
+//        setContentView(R.layout.activity_display_settings);
 
-        Toolbar myToolbar = (Toolbar) findViewById(R.id.my_settings_toolbar);
-        setSupportActionBar(myToolbar);
+//        Toolbar myToolbar = (Toolbar) findViewById(R.id.my_settings_toolbar);
+//        setSupportActionBar(myToolbar);
 
         if (getSupportActionBar() != null) {
             this.getSupportActionBar().setDisplayHomeAsUpEnabled(false);

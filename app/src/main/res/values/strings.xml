@@ -1,8 +1,8 @@
 <resources>
     <string name="app_name">WholeSkyImager</string>
     <string name="main_label">Camera Test</string>
-    <string name="button1_text">take picture</string>
-    <string name="button2_text">save</string>
+    <string name="button1_text">Run</string>
+    <string name="button2_text">Stop</string>
     <string name="title_activity_main2">Main2Activity</string>
     <string name="action_settings">Settings</string>
     <string name="title_activity_display_settings">DisplaySettingsActivity</string>

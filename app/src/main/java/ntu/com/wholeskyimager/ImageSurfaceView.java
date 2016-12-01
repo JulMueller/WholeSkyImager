@@ -17,6 +17,7 @@ public class ImageSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
     private Camera camera;
     private SurfaceHolder surfaceHolder;
+    private boolean sPreviewing;
 
     //Constructor that
     @SuppressWarnings("deprecation")
@@ -28,6 +29,9 @@ public class ImageSurfaceView extends SurfaceView implements SurfaceHolder.Callb
         this.surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
     }
 
+    public boolean getPreviewState() {
+        return sPreviewing;
+    }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
@@ -35,6 +39,7 @@ public class ImageSurfaceView extends SurfaceView implements SurfaceHolder.Callb
             this.camera.setDisplayOrientation(90);
             this.camera.setPreviewDisplay(holder);
             this.camera.startPreview();
+            sPreviewing = true;
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -54,6 +59,7 @@ public class ImageSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
         this.camera.stopPreview();
+        this.camera.setPreviewCallback(null); //newly added
         this.camera.release();
     }
 
@@ -78,6 +84,23 @@ public class ImageSurfaceView extends SurfaceView implements SurfaceHolder.Callb
         } catch (Exception e) {
             // this error is fixed in the camera Error Callback (Error 100)
             Log.d(VIEW_LOG_TAG, "Error starting camera preview: " + e.getMessage());
+        }
+    }
+
+    public void releaseCamera() {
+            // check if Camera instance exists
+
+        sPreviewing = false;
+        if (camera != null) {
+            sPreviewing = false;
+            // first stop preview
+            camera.stopPreview();
+            // then cancel its preview callback
+            camera.setPreviewCallback(null);
+            // and finally release it
+            camera.release();
+            // sanitize you Camera object holder
+            camera = null;
         }
     }
 }

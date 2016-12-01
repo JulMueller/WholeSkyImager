@@ -10,9 +10,10 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_alignParentTop="true"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:orientation="vertical">
+        android:layout_alignParentStart="true">
 
         <android.support.v7.widget.Toolbar
             android:id="@+id/my_toolbar"
@@ -23,6 +24,34 @@
             android:theme="@style/ThemeOverlay.AppCompat.ActionBar"
             app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
             app:titleMarginStart="20dp"/>
+
+        <GridLayout
+
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:layout_marginRight="4dp"
+            android:layout_marginLeft="4dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:text="Status: "/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:id="@+id/tvStatusInfo"
+                android:text="NULL"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:id="@+id/tvConnectionStatus"
+                android:text="offline"
+                android:layout_gravity="right"/>
+        </GridLayout>
 
         <FrameLayout
             android:id="@+id/camera_preview"
@@ -44,6 +73,8 @@
             android:adjustViewBounds="true"
             />
         -->
+
+
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -63,29 +94,14 @@
                 android:layout_height="wrap_content"
                 android:onClick="startEdgeDetection"
                 android:text="@string/button2_text"/>
-
-            <Switch
-                android:id="@+id/switchHDR"
+            <Button
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:checked="false"
-                android:splitTrack="false"
-                android:text="HDR"/>
-        </LinearLayout>
+                android:onClick="postData"
+                android:text="Upload"
+                android:id="@+id/buttonUpload"/>
 
-        <SeekBar
-            android:id="@+id/seekBarEV"
-            style="@style/Widget.AppCompat.SeekBar.Discrete"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:layout_marginLeft="20dp"
-            android:layout_marginRight="20dp"
-            android:layout_marginTop="10dp"
-            android:max="2"
-            android:progress="1"
-            />
+        </LinearLayout>
 
         <ImageView
             android:id="@+id/imageOutput"

@@ -3,15 +3,18 @@
  */
 package ntu.com.wholeskyimager;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.hardware.Camera.PictureCallback;
+import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -51,54 +54,25 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 
+import static android.os.Build.VERSION_CODES.M;
+
 @SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "MainActivity";
-    private static final int WAHRSIS_MODEL_NR = 5;
+    private final String TAG = this.getClass().getName(); //gets the name of the current class eg. "MyActivity".
     private static int wahrsisModelNr = 5;
+    private boolean sPreviewing;
     protected Button loadImage;
     protected Button startEdgeDetection;
-    protected TextView mainLabel;
+    protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
     protected ImageView inputImage;
     protected ImageView outputImage;
-    protected Switch hdrSwitch;
-    protected SeekBar evSeekbar;
     SharedPreferences sharedPref;
     private ImageSurfaceView mImageSurfaceView;
-    //Picture Callback Method
-    PictureCallback pictureCallback = new PictureCallback() {
-        @Override
-        //action if picture is taken
-        public void onPictureTaken(byte[] data, Camera camera) {
-
-            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
-            if (bitmap == null) {
-                Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
-                return;
-            }
-            //actual image file: pictureFile
-            File pictureFile = getOutputMediaFile();
-            if (pictureFile == null) {
-                return;
-            }
-            try {
-                //write the file
-                FileOutputStream fos = new FileOutputStream(pictureFile);
-                fos.write(data);
-                fos.close();
-                Toast toast = Toast.makeText(MainActivity.this, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
-                toast.show();
-
-            } catch (FileNotFoundException e) {
-            } catch (IOException e) {
-            }
-            outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300));
-            mImageSurfaceView.refreshCamera();
-            //outputImage.setRotation(90);
-        }
-    };
     private Camera camera;
+
+    WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
+
     private boolean hdrModeOn;
     private int exposureCompensationValue;
     private FrameLayout cameraPreviewLayout;
@@ -107,31 +81,6 @@ public class MainActivity extends AppCompatActivity {
      * See https://g.co/AppIndexing/AndroidStudio for more information.
      */
     private GoogleApiClient mClient;
-
-    @Nullable //this denotes that the method might legitimately return null
-    private static File getOutputMediaFile() {
-        //make a new file directory inside the "sdcard" folder
-        File mediaStorageDir = new File("/sdcard/", "WSI");
-
-        //if folder could not be created
-        if (!mediaStorageDir.exists()) {
-            //if you cannot make this folder return
-            if (!mediaStorageDir.mkdirs()) {
-                Log.d("WholeSkyImager", "failed to create directory");
-                return null;
-            }
-        }
-        //naming convention: 2016-11-22-14-20-01-wahrsis5.jpg
-        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg
-        //take the current timeStamp
-//        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
-        File mediaFile;
-        //and make a media file:
-        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + wahrsisModelNr + ".jpg");
-
-        return mediaFile;
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,25 +91,12 @@ public class MainActivity extends AppCompatActivity {
         setupActionBar();
 
         outputImage = (ImageView) findViewById(R.id.imageOutput);
-        hdrSwitch = (Switch) findViewById(R.id.switchHDR);
-        evSeekbar = (SeekBar) findViewById(R.id.seekBarEV);
+        tvConnectionStatus  = (TextView) findViewById(R.id.tvConnectionStatus);
+        tvStatusInfo = (TextView) findViewById(R.id.tvStatusInfo);
 
-        hdrSwitch.setChecked(false);
-        hdrSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isChecked) {
-                    Log.d("Switch toggle", "Switch is currently ON");
-                } else {
-                    Log.d("Switch toggle", "Switch is currently OFF");
-                }
-            }
-        });
-
-
-        //from Tutorial
         camera = checkDeviceCamera();
 
+//        mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
         mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
         cameraPreviewLayout = (FrameLayout) findViewById(R.id.camera_preview);
         cameraPreviewLayout.addView(mImageSurfaceView);
@@ -174,8 +110,6 @@ public class MainActivity extends AppCompatActivity {
         Log.e("Camera vertAngle: ", vertAngleS);
         */
 
-        //cameraPreviewLayout.addView(mImageSurfaceView);
-
         //Check if OpenCV works properly
         if (!OpenCVLoader.initDebug()) {
             Log.e(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), not working.");
@@ -184,6 +118,9 @@ public class MainActivity extends AppCompatActivity {
         }
         // set preferences
         getWSISettings();
+        checkNetworkStatus();
+        tvStatusInfo.setText("idle");
+
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         mClient = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
@@ -214,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
 
             case R.id.action_refresh:
                 getWSISettings();
+                checkNetworkStatus();
                 Toast.makeText(MainActivity.this, "Refreshed Settings", Toast.LENGTH_SHORT).show();
                 return true;
 
@@ -233,6 +171,67 @@ public class MainActivity extends AppCompatActivity {
                 return super.onOptionsItemSelected(item);
         }
     }
+
+    //Picture Callback Method
+    PictureCallback pictureCallback = new PictureCallback() {
+        @Override
+        //action if picture is taken
+        public void onPictureTaken(byte[] data, Camera camera) {
+
+            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+            if (bitmap == null) {
+                Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
+                return;
+            }
+            //actual image file: pictureFile
+            File pictureFile = getOutputMediaFile();
+            if (pictureFile == null) {
+                return;
+            }
+            try {
+                //write the file
+                FileOutputStream fos = new FileOutputStream(pictureFile);
+                fos.write(data);
+                fos.close();
+                Toast toast = Toast.makeText(MainActivity.this, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
+                toast.show();
+
+            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
+            }
+            outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300));
+            if(mImageSurfaceView.getPreviewState()) {
+                mImageSurfaceView.refreshCamera();
+            }
+            //outputImage.setRotation(90);
+        }
+    };
+
+    @Nullable //this denotes that the method might legitimately return null
+    private static File getOutputMediaFile() {
+        //make a new file directory inside the "sdcard" folder
+        File mediaStorageDir = new File("/sdcard/", "WSI");
+
+        //if folder could not be created
+        if (!mediaStorageDir.exists()) {
+            //if you cannot make this folder return
+            if (!mediaStorageDir.mkdirs()) {
+                Log.d("WholeSkyImager", "failed to create directory");
+                return null;
+            }
+        }
+        //naming convention: 2016-11-22-14-20-01-wahrsis5.jpg
+        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg
+        //take the current timeStamp
+//        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+        File mediaFile;
+        //and make a media file:
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + wahrsisModelNr + ".jpg");
+
+        return mediaFile;
+    }
+
 
     //check if cam is available and use back facing camera
 
@@ -332,7 +331,25 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    //button method (take picture)
+    /**
+     * Button Method Upload Image
+     */
+    public void postData(View view) {
+        Toast.makeText(this, "POST execution started.", Toast.LENGTH_LONG).show();
+        //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
+        // TODO: replace name with global name
+        int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
+        Log.d(TAG, "POST execution finished. Response code: " + responseCode);
+
+        // for testing connection
+//        Toast.makeText(this, "HTTP GET execution started.", Toast.LENGTH_LONG).show();
+//        int responseCode = serverClient.httpGET();
+//        Log.d(TAG, "GET execution finished. Response corde:" + responseCode);
+    }
+
+    /**
+     * Button Method Take Picture
+     */
     @SuppressWarnings("deprecation")
     public void importImage(View view) throws InterruptedException {
         //do something
@@ -344,32 +361,32 @@ public class MainActivity extends AppCompatActivity {
         int maxExposureComp = params.getMaxExposureCompensation();
         int minExposureComp = params.getMinExposureCompensation();
 
-        if (hdrSwitch.isChecked()) {
-            Log.d(TAG, "Changed to HDR mode");
+        if (sharedPref.getBoolean("createHDR", false)) {
+            Log.d(TAG, "HDR mode active.");
 
             //params.setSceneMode(Camera.Parameters.SCENE_MODE_HDR);
             params.set("mode", "m");
             params.set("iso", "ISO100");
 
-            Log.d(TAG, "SeekBar Value: " + String.valueOf(evSeekbar.getProgress()));
-
-            switch (evSeekbar.getProgress()) {
-                case 0:
-                    params.setExposureCompensation(minExposureComp);
-                    break;
-                case 1:
-                    params.setExposureCompensation(0);
-                    break;
-                case 2:
-                    params.setExposureCompensation(maxExposureComp);
-            }
+//            Log.d(TAG, "SeekBar Value: " + String.valueOf(evSeekbar.getProgress()));
+//
+//            switch (evSeekbar.getProgress()) {
+//                case 0:
+//                    params.setExposureCompensation(minExposureComp);
+//                    break;
+//                case 1:
+//                    params.setExposureCompensation(0);
+//                    break;
+//                case 2:
+//                    params.setExposureCompensation(maxExposureComp);
+//            }
             camera.setParameters(params);
             Log.d(TAG, "set ExposureCompensation to: " + params.getExposureCompensation());
             camera.takePicture(null, null, pictureCallback);
 
         } else {
             params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
-            Log.d(TAG, "Changed to auto mode");
+            Log.d(TAG, "HDR mode inactive.");
             camera.takePicture(null, null, pictureCallback);
         }
         //camera.setParameters(params);
@@ -408,6 +425,7 @@ public class MainActivity extends AppCompatActivity {
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
+        mImageSurfaceView.refreshCamera();
         mClient.connect();
         AppIndex.AppIndexApi.start(mClient, getIndexApiAction());
     }
@@ -415,7 +433,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onStop() {
         super.onStop();
-
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         AppIndex.AppIndexApi.end(mClient, getIndexApiAction());
@@ -424,14 +441,15 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
+        mImageSurfaceView.releaseCamera();
         super.onPause();
-        //releaseCamera();              // release the camera immediately on pause event
+//        camera.stopPreview();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        //releaseCamera();              // release the camera immediately on pause event
+        camera.startPreview();
     }
 
     @Override
@@ -459,13 +477,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void checkNetworkStatus() {
+        // check internet connection
+        if (serverClient.isConnected()) {
+            tvConnectionStatus.setText("online");
+            tvConnectionStatus.setTextColor(getResources().getColor(R.color.darkGreen));
+            Log.d(TAG, "Device is online.");
+        } else {
+            tvConnectionStatus.setText("offline");
+            tvConnectionStatus.setTextColor(Color.BLACK);
+            Log.d(TAG, "Device is offline.");
+        }
+    }
     /**
      * set up preferences
      */
     private void getWSISettings() {
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-        String wahrsisNo = sharedPref.getString("settingsComment", "empty");
-        Log.d(TAG, "Comment: " + wahrsisNo);
         Log.d(TAG, "Model Nr in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
         // Set wahrsis model number according to settings activity
         if (Integer.parseInt(sharedPref.getString("wahrsisNo", "0")) != 0) {
