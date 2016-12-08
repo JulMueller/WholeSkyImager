@@ -314,43 +314,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     fos.close();
                     Log.d(TAG, "Save successful (rotated): " + pictureFileRotated.getName());
                     Log.d(TAG, filePath + fileNameRotated);
-                    ExifInterface oldExif = new ExifInterface(filePath + fileNameTemp);
-//                    String exifOrientation = oldExif.getAttribute(ExifInterface.TAG_ORIENTATION);
-//                    String exifblbla = oldExif.getAttribute();
-                    ExifInterface newExif = new ExifInterface(filePath + fileNameRotated);
-                    if (oldExif.getAttribute("DateTime") != null) {
-                        newExif.setAttribute("DateTime",
-                                oldExif.getAttribute("DateTime"));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_APERTURE) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_APERTURE,
-                                oldExif.getAttribute(ExifInterface.TAG_APERTURE));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_ISO) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_ISO,
-                                oldExif.getAttribute(ExifInterface.TAG_ISO));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_EXPOSURE_TIME,
-                                oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED,
-                                oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_MODEL) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_MODEL,
-                                oldExif.getAttribute(ExifInterface.TAG_MODEL));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_MAKE) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_MAKE,
-                                oldExif.getAttribute(ExifInterface.TAG_MAKE));
-                    }
-                    if (oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE) != null) {
-                        newExif.setAttribute(ExifInterface.TAG_WHITE_BALANCE,
-                                oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
-                    }
-                    newExif.saveAttributes();
+                    copyExif(filePath + fileNameTemp, filePath + fileNameRotated);
                 }
 
                 //write exif data
@@ -880,6 +844,52 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Log.d(TAG, "Set exif data.");
         } catch (IOException e) {
             Log.e(TAG, "Cannot set exif data: " + filepath);
+        }
+    }
+    private void copyExif(String source, String target) {
+        ExifInterface oldExif = null, newExif = null;
+        try {
+            oldExif = new ExifInterface(source);
+            newExif = new ExifInterface(target);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        if (oldExif.getAttribute("DateTime") != null) {
+            newExif.setAttribute("DateTime",
+                    oldExif.getAttribute("DateTime"));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_APERTURE) != null) {
+            newExif.setAttribute(ExifInterface.TAG_APERTURE,
+                    oldExif.getAttribute(ExifInterface.TAG_APERTURE));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_ISO) != null) {
+            newExif.setAttribute(ExifInterface.TAG_ISO,
+                    oldExif.getAttribute(ExifInterface.TAG_ISO));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) != null) {
+            newExif.setAttribute(ExifInterface.TAG_EXPOSURE_TIME,
+                    oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED) != null) {
+            newExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED,
+                    oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_MODEL) != null) {
+            newExif.setAttribute(ExifInterface.TAG_MODEL,
+                    oldExif.getAttribute(ExifInterface.TAG_MODEL));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_MAKE) != null) {
+            newExif.setAttribute(ExifInterface.TAG_MAKE,
+                    oldExif.getAttribute(ExifInterface.TAG_MAKE));
+        }
+        if (oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE) != null) {
+            newExif.setAttribute(ExifInterface.TAG_WHITE_BALANCE,
+                    oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
+        }
+        try {
+            newExif.saveAttributes();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
