@@ -36,9 +36,9 @@
             android:title="Rotate image"/>
         <SwitchPreference
             android:defaultValue="false"
-            android:key="storeLoc"
-            android:summary="Enable to store location and heading in EXIF."
-            android:title="Store location"/>
+            android:key="extendedExif"
+            android:summary="Enable to store location, heading and gravity in image files."
+            android:title="Extended exif data"/>
     </PreferenceCategory>
     <PreferenceCategory android:title="Network">
         <EditTextPreference

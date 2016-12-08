@@ -1,8 +1,11 @@
 /**
  * @author Julian Mueller
+ * Version 0.3.0
+ * added Compass / Accelerometer functionality
  */
 package ntu.com.wholeskyimager;
 
+import android.Manifest;
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -11,21 +14,36 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.hardware.Camera.PictureCallback;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.location.Criteria;
+import android.location.GpsStatus;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.media.ExifInterface;
 import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Environment;
 import android.os.Handler;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -64,15 +82,18 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 import static android.os.Build.VERSION_CODES.M;
+import static android.util.Log.d;
+import static java.lang.Math.abs;
 
 @SuppressWarnings("deprecation")
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private final String TAG = this.getClass().getName(); //gets the name of the current class eg. "MyActivity".
     private static int wahrsisModelNr = 5;
     private int pictureInterval = 0;
-    private boolean sPreviewing;
+    private boolean sPreviewing, flagWriteExif = false, flagRealignImage = true;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
@@ -87,6 +108,28 @@ public class MainActivity extends AppCompatActivity {
     private boolean hdrModeOn, connectionStatus, runImaging = true;
     private int exposureCompensationValue;
     private FrameLayout cameraPreviewLayout;
+
+    //Sensor components
+    private SensorManager mSensorManager;
+    private Sensor mSensor;
+    private Sensor magnetometer;
+    private Sensor accelerometer;
+    private float currentDegree = 0f;
+    private final static float THRESHOLD_ACCX = 0.08f;
+    private final static float THRESHOLD_ACCY = 0.08f;
+    private final static float THRESHOLD_ACCZ = 9.79f;
+    private float[] mGravity;
+    private float[] mGeomagnetic;
+    private float azimuth;
+
+    private String gpsLong, gpsLat, gravityString;
+    private double longitude, latitude;
+    private int updateCounter = 0;
+
+    private LocationManager locationManager;
+    private Location location;
+    private String provider;
+
     /**
      * ATTENTION: This was auto-generated to implement the App Indexing API.
      * See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -127,7 +170,7 @@ public class MainActivity extends AppCompatActivity {
                 .setAutoCancel(true).build();
 
         //enable notification
-        notificationManager.notify(0, notificationUploadStarted);
+//        notificationManager.notify(0, notificationUploadStarted);
 //        notificationManager.cancelAll();
 
         /*
@@ -143,11 +186,13 @@ public class MainActivity extends AppCompatActivity {
         if (!OpenCVLoader.initDebug()) {
             Log.e(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), not working.");
         } else {
-            Log.d(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), working.");
+            d(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), working.");
         }
         // set preferences
         getWSISettings();
         checkNetworkStatus();
+        instantiateGPS();
+        instantiateSensors();
         tvStatusInfo.setText("idle");
 
         final Handler handler = new Handler();
@@ -158,12 +203,12 @@ public class MainActivity extends AppCompatActivity {
                     if(runImaging) {
                         Date d = new Date();
                         CharSequence dateTime = DateFormat.format("yyyy-MM-dd hh:mm:ss", d.getTime());
-                        Log.d(TAG, "Runnable executed. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
+                        d(TAG, "Runnable executed. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
                     }
                 }
                 catch (Exception e) {
                     // TODO: handle exception
-                    Log.d(TAG, "Error: Runnable exception.");
+                    d(TAG, "Error: Runnable exception.");
                 }
                 finally{
                     //also call the same runnable to call it at regular interval
@@ -172,19 +217,6 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         handler.post(runnable);
-
-        //timer setup
-//        new CountDownTimer(60000, 1000) {
-//
-//            public void onTick(long millisUntilFinished) {
-//                Log.d(TAG,"Seconds remaining: " + millisUntilFinished / 1000);
-//            }
-//
-//            public void onFinish() {
-//                Log.d(TAG, "Done");
-//            }
-//
-//        }.start();
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -244,27 +276,93 @@ public class MainActivity extends AppCompatActivity {
         public void onPictureTaken(byte[] data, Camera camera) {
 
             Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+            Bitmap bitmapRotated = null;
             if (bitmap == null) {
                 Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
                 return;
             }
-            //actual image file: pictureFile
-            File pictureFile = getOutputMediaFile();
-            if (pictureFile == null) {
+
+            //actual image file (jpg): pictureFile
+            //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg eg. 2016-11-22-14-20-01-wahrsis5.jpg
+            //take the current timeStamp
+            String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+//            String ending = "temp";
+            String fileNameTemp = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
+            String fileNameRotated = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "rotated" + ".jpg";
+
+            File pictureFileTemp = getOutputMediaFile(fileNameTemp);
+            File pictureFileRotated = getOutputMediaFile(fileNameRotated);
+            String filePath = Environment.getExternalStorageDirectory().getPath() + "/WSI/";
+
+            if (pictureFileTemp == null) {
                 return;
             }
             try {
                 //write the file
-                FileOutputStream fos = new FileOutputStream(pictureFile);
+                FileOutputStream fos = new FileOutputStream(pictureFileTemp);
                 fos.write(data);
                 fos.close();
-                Toast toast = Toast.makeText(MainActivity.this, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
-                toast.show();
+                Log.d(TAG, "Save successful: " + pictureFileTemp.getName());
+//                    Toast toast = Toast.makeText(MainActivity.this, "Original picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
+//                    toast.show();
+                if(flagRealignImage) {
+                    //rotate image according to compass direction
+                    bitmapRotated = RotateBitmap(bitmap, azimuth);
+                    FileOutputStream fos2 = new FileOutputStream(pictureFileRotated);
+                    bitmapRotated.compress(Bitmap.CompressFormat.JPEG, 100, fos2);
+                    //write the file
+                    fos.close();
+                    Log.d(TAG, "Save successful (rotated): " + pictureFileRotated.getName());
+                    Log.d(TAG, filePath + fileNameRotated);
+                    ExifInterface oldExif = new ExifInterface(filePath + fileNameTemp);
+//                    String exifOrientation = oldExif.getAttribute(ExifInterface.TAG_ORIENTATION);
+//                    String exifblbla = oldExif.getAttribute();
+                    ExifInterface newExif = new ExifInterface(filePath + fileNameRotated);
+                    if (oldExif.getAttribute("DateTime") != null) {
+                        newExif.setAttribute("DateTime",
+                                oldExif.getAttribute("DateTime"));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_APERTURE) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_APERTURE,
+                                oldExif.getAttribute(ExifInterface.TAG_APERTURE));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_ISO) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_ISO,
+                                oldExif.getAttribute(ExifInterface.TAG_ISO));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_EXPOSURE_TIME,
+                                oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED,
+                                oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_MODEL) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_MODEL,
+                                oldExif.getAttribute(ExifInterface.TAG_MODEL));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_MAKE) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_MAKE,
+                                oldExif.getAttribute(ExifInterface.TAG_MAKE));
+                    }
+                    if (oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE) != null) {
+                        newExif.setAttribute(ExifInterface.TAG_WHITE_BALANCE,
+                                oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
+                    }
+                    newExif.saveAttributes();
+                }
 
+                //write exif data
+                if(flagWriteExif) {
+                    writeExifData(filePath + pictureFileTemp.getName());
+                }
             } catch (FileNotFoundException e) {
+                Log.e(TAG, "Save falied.");
             } catch (IOException e) {
+                Log.e(TAG, "Save failed.");
             }
-            outputImage.setImageBitmap(scaleDownBitmapImage(bitmap, 400, 300));
+            outputImage.setImageBitmap(scaleDownBitmapImage(bitmapRotated, 400, 300));
             if(mImageSurfaceView.getPreviewState()) {
                 mImageSurfaceView.refreshCamera();
             }
@@ -273,26 +371,46 @@ public class MainActivity extends AppCompatActivity {
     };
 
     @Nullable //this denotes that the method might legitimately return null
-    private static File getOutputMediaFile() {
+    private static File getOutputMediaFile(String fileName) {
         //make a new file directory inside the "sdcard" folder
         File mediaStorageDir = new File("/sdcard/", "WSI");
 
         //if folder could not be created
         if (!mediaStorageDir.exists()) {
-            //if you cannot make this folder return
             if (!mediaStorageDir.mkdirs()) {
-                Log.d("WholeSkyImager", "failed to create directory");
+                d("WholeSkyImager", "failed to create directory");
                 return null;
             }
         }
-        //naming convention: 2016-11-22-14-20-01-wahrsis5.jpg
-        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg
+        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg eg. 2016-11-22-14-20-01-wahrsis5.jpg
         //take the current timeStamp
-//        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+//        String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+//        String complete = timeStamp.concat("-wahrsis" + wahrsisModelNr + ".jpg");
+        File mediaFile;
+        //and make a media file:
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + fileName);
+
+        return mediaFile;
+    }
+
+    @Nullable //this denotes that the method might legitimately return null
+    private static File getOutputMediaFileTemp() {
+        //make a new file directory inside the "sdcard" folder
+        File mediaStorageDir = new File("/sdcard/", "WSI");
+
+        //if folder could not be created
+        if (!mediaStorageDir.exists()) {
+            if (!mediaStorageDir.mkdirs()) {
+                d("WholeSkyImager", "failed to create directory");
+                return null;
+            }
+        }
+        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg eg. 2016-11-22-14-20-01-wahrsis5.jpg
+        //take the current timeStamp
         String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
         File mediaFile;
         //and make a media file:
-        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + wahrsisModelNr + ".jpg");
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + wahrsisModelNr + "-original.jpg");
 
         return mediaFile;
     }
@@ -340,7 +458,7 @@ public class MainActivity extends AppCompatActivity {
 
             // save settings
             mCamera.setParameters(params);
-            Log.d(this.getClass().getSimpleName(), "Camera started successfully.");
+            d(this.getClass().getSimpleName(), "Camera started successfully.");
         } catch (Exception e) {
             e.printStackTrace(); //show error if camera can't be accessed
             Log.e(this.getClass().getSimpleName(), "Could not start camera");
@@ -393,7 +511,9 @@ public class MainActivity extends AppCompatActivity {
 
     //button method
     public void startEdgeDetection(View view) {
+        if (updateCounter > 10) {
 
+        }
     }
 
     /**
@@ -405,13 +525,13 @@ public class MainActivity extends AppCompatActivity {
             //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
             // TODO: replace name with global name
             int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
-            Log.d(TAG, "POST execution finished. Response code: " + responseCode);
+            d(TAG, "POST execution finished. Response code: " + responseCode);
             if (responseCode == 201) {
                 tvStatusInfo.setText("Image uploaded.");
             }
         }
         else {
-            Log.d(TAG, "POST Execution not possible. No connection to internet.");
+            d(TAG, "POST Execution not possible. No connection to internet.");
         }
         // for testing connection
 //        Toast.makeText(this, "HTTP GET execution started.", Toast.LENGTH_LONG).show();
@@ -425,7 +545,7 @@ public class MainActivity extends AppCompatActivity {
     @SuppressWarnings("deprecation")
     public void importImage(View view) throws InterruptedException {
         //do something
-        Log.d("Button Pressed", "Image loading should be started!");
+        d("Button Pressed", "Image loading should be started!");
         //check the current state before we display the screen
         Camera.Parameters params = camera.getParameters();
 
@@ -434,7 +554,7 @@ public class MainActivity extends AppCompatActivity {
         int minExposureComp = params.getMinExposureCompensation();
 
         if (sharedPref.getBoolean("createHDR", false)) {
-            Log.d(TAG, "HDR mode active.");
+            d(TAG, "HDR mode active.");
 
             //params.setSceneMode(Camera.Parameters.SCENE_MODE_HDR);
             params.set("mode", "m");
@@ -453,12 +573,12 @@ public class MainActivity extends AppCompatActivity {
 //                    params.setExposureCompensation(maxExposureComp);
 //            }
             camera.setParameters(params);
-            Log.d(TAG, "set ExposureCompensation to: " + params.getExposureCompensation());
+            d(TAG, "set ExposureCompensation to: " + params.getExposureCompensation());
             camera.takePicture(null, null, pictureCallback);
 
         } else {
             params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
-            Log.d(TAG, "HDR mode inactive.");
+            d(TAG, "HDR mode inactive.");
             camera.takePicture(null, null, pictureCallback);
         }
         //camera.setParameters(params);
@@ -515,13 +635,21 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
 //        mImageSurfaceView.releaseCamera();
         super.onPause();
-//        camera.stopPreview();
+
+        // stop the listener and save battery
+        mSensorManager.unregisterListener(this);
+
+        //        camera.stopPreview();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         camera.startPreview();
+        // for the system's orientation sensor registered listeners
+        mSensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+        mSensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI);
+        mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
     }
 
     @Override
@@ -529,6 +657,149 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
+
+    @Override
+    public void onSensorChanged(SensorEvent sensorEvent) {
+
+        Sensor mySensor = sensorEvent.sensor;
+
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
+            mGravity = sensorEvent.values;
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
+            mGeomagnetic = sensorEvent.values;
+
+        //process level information
+        if (mySensor.getType() == Sensor.TYPE_GRAVITY){
+            float x = sensorEvent.values[0];
+            float y = sensorEvent.values[1];
+            float z = sensorEvent.values[2];
+
+            x = Math.round(x * 1000f) / 1000f;
+            y = Math.round(y * 1000f) / 1000f;
+            z = Math.round(z * 1000f) / 1000f;
+//            textAX.setText(Float.toString(x));
+//            textAY.setText(Float.toString(y));
+//            textAZ.setText(Float.toString(z));
+            if (abs(z) >= THRESHOLD_ACCZ) {
+//                textAZ.setTextColor(Color.GREEN);
+            }
+            else {
+//                textAZ.setTextColor(Color.RED);
+            }
+            if (abs(x) <= THRESHOLD_ACCX) {
+//                textAX.setTextColor(Color.GREEN);
+            }
+            else {
+//                textAX.setTextColor(Color.RED);
+            }
+            if (abs(y) <= THRESHOLD_ACCY) {
+//                textAY.setTextColor(Color.GREEN);
+            }
+            else {
+//                textAY.setTextColor(Color.RED);
+            }
+        }
+
+        //calculate heading
+        if (mGravity != null && mGeomagnetic != null) {
+            float R[] = new float[9];
+            float I[] = new float[9];
+            boolean success = SensorManager.getRotationMatrix(R, I, mGravity, mGeomagnetic);
+            if (success) {
+                float orientation[] = new float[3];
+                SensorManager.getOrientation(R, orientation);
+                //Log.i("MyActivity", "SensorEvent" + azimut);
+                float thisAzimuth = (float) Math.toDegrees(orientation[0]); // orientation contains: azimut, pitch and roll
+                thisAzimuth = Math.round(thisAzimuth * 10f) / 10f;
+                azimuth = thisAzimuth;
+//                Log.d(TAG, "azimuth: " + azimuth + "°.");
+//                textHeading.setText(Float.toString(azimut));
+//                compassNeedle.setRotation(360-azimut);
+            }
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        // not in use
+    }
+
+    // Define a listener that responds to location updates
+    LocationListener locationListener = new LocationListener() {
+        public void onLocationChanged(Location location) {
+            // Called when a new location is found by the network location provider.
+            longitude = location.getLongitude();
+            latitude = location.getLatitude();
+            updateCounter++;
+            Log.d(TAG, "Long: " + longitude + " Lat: " + latitude);
+        }
+
+        public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+        public void onProviderEnabled(String provider) {}
+
+        public void onProviderDisabled(String provider) {
+            if (provider.equals("gps")) {
+                Log.d(TAG, "GPS Provider disabled.");
+            }
+        }
+    };
+
+    public boolean instantiateSensors() {
+        boolean success = false;
+        //instantiate device sensor
+        mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
+
+        // accelerometer sensor (for device orientation)
+        if( mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null ) {
+            Log.d(TAG, "Found accelerometer.");
+            accelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        } else {
+            Log.e(TAG, "No support for accelerometer.");
+        }
+
+        // magnetic sensor (for compass direction)
+        if( mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null ) {
+            Log.d(TAG, "Found magnetic sensor.");
+            magnetometer = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            success = true;
+        } else {
+            Log.e(TAG, "No support for magnetic sensor.");
+        }
+        return success;
+    }
+
+    public boolean instantiateGPS() {
+        boolean success = false;
+        LocationManager locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+
+        boolean enabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        if (!enabled) {
+            Log.d(TAG, "GPS is not activated.");
+            Intent gpsSettingsIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            startActivity(gpsSettingsIntent);
+        }
+        // Define the criteria how to select the locatioin provider -> use
+        // default
+        Criteria criteria = new Criteria();
+        provider = locationManager.getBestProvider(criteria, false);
+        // Register the listener with the Location Manager to receive location updates
+        try {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 300000, 5, locationListener); //minimum interval 5 minutes, minimum distance 5 meter
+        } catch (SecurityException e) {
+            Log.d(TAG, "GPS access has not been granted.");
+        }
+
+        // Initialize the location fields
+        if (location != null) {
+            Log.d(TAG, "Provider " + provider + " has been selected.");
+            success = true;
+        } else {
+            Log.d(TAG, "Could not find location.");
+        }
+        return success;
+    }
     public void setupActionBar() {
         Toolbar myToolbar = (Toolbar) findViewById(R.id.my_toolbar);
         setSupportActionBar(myToolbar);
@@ -554,11 +825,11 @@ public class MainActivity extends AppCompatActivity {
         if (serverClient.isConnected()) {
             tvConnectionStatus.setText("online");
             tvConnectionStatus.setTextColor(getResources().getColor(R.color.darkGreen));
-            Log.d(TAG, "Device is online.");
+            d(TAG, "Device is online.");
         } else {
             tvConnectionStatus.setText("offline");
             tvConnectionStatus.setTextColor(Color.BLACK);
-            Log.d(TAG, "Device is offline.");
+            d(TAG, "Device is offline.");
         }
     }
     /**
@@ -567,13 +838,67 @@ public class MainActivity extends AppCompatActivity {
     private void getWSISettings() {
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
 
-        Log.d(TAG, "Model No. in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
+        d(TAG, "Model No. in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
         // Set wahrsis model number according to settings activity
         if (Integer.parseInt(sharedPref.getString("wahrsisNo", "0")) != 0) {
             wahrsisModelNr = Integer.parseInt(sharedPref.getString("wahrsisNo", "404"));
-            Log.d(TAG, "Model No. set to: " + wahrsisModelNr);
+            d(TAG, "Model No. set to: " + wahrsisModelNr);
         }
         pictureInterval = Integer.parseInt(sharedPref.getString("picInterval", "404"));
-        Log.d(TAG, "Picture interval: " + pictureInterval + " min.");
+        d(TAG, "Picture interval: " + pictureInterval + " min.");
+        flagWriteExif = sharedPref.getBoolean("extendedExif", false);
+        d(TAG, "Extended exif: " + flagWriteExif);
+//        flagRealignImage = sharedPref.getBoolean("realignImage", false);
+        d(TAG, "Realign image: " + flagRealignImage);
+    }
+
+      /**
+     * Transform the floating point Longitude / Latitude into a DMS String. The latitude is expressed as
+     * three RATIONAL values giving the degrees, minutes, and seconds, respectively.
+     * When degrees, minutes and seconds are expressed, the format is dd/1,mm/1,ss/1.
+     * @param position
+     * @return DMS Longitude String
+     */
+    public String coordinatesToDMS(double position) {
+        if (location == null) {
+            return "0/1,0/1,0/1000";
+        }
+        String[] degMinSec = Location.convert(position, Location.FORMAT_SECONDS).split(":");
+        return degMinSec[0] + "/1," + degMinSec[1] + "/1," + degMinSec[2] + "/1000";
+    }
+
+    private void writeExifData(String filepath) {
+        try {
+            // Save the orientation in EXIF.
+            ExifInterface exif = new ExifInterface(filepath);
+            exif.setAttribute("GPSImgDirection", Float.toString(azimuth)); //Direction in° from 0 to 359.99
+            exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, coordinatesToDMS(latitude));
+            exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, location.getLatitude() < 0 ? "S" : "N");
+            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, coordinatesToDMS(longitude));
+            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, location.getLongitude() < 0 ? "W" : "E");
+            exif.saveAttributes();
+            Log.d(TAG, "Set exif data.");
+        } catch (IOException e) {
+            Log.e(TAG, "Cannot set exif data: " + filepath);
+        }
+    }
+
+    /**
+     * Rotates Bitmap according to compass
+     * @param source
+     * @param angle
+     * @return
+     */
+    public static Bitmap RotateBitmap(Bitmap source, float angle)
+    {
+        //initial way
+//        Matrix matrix = new Matrix();
+//        matrix.postRotate(angle);
+//        return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+
+        //more advanced way
+        Matrix matrix = new Matrix();
+        matrix.postRotate(angle);
+        return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
     }
 }
