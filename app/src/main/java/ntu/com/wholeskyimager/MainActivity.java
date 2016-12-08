@@ -32,7 +32,7 @@ import android.location.GpsStatus;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.media.ExifInterface;
+//import android.media.ExifInterface;
 import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
@@ -85,7 +85,15 @@ import java.util.TimerTask;
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 import static android.os.Build.VERSION_CODES.M;
 import static android.util.Log.d;
+import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_IMG_DIRECTION;
+import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_LATITUDE;
 import static java.lang.Math.abs;
+
+import it.sephiroth.android.library.exif2.ExifInterface;
+import it.sephiroth.android.library.exif2.ExifTag;
+import it.sephiroth.android.library.exif2.ExifUtil;
+import it.sephiroth.android.library.exif2.IfdId;
+import it.sephiroth.android.library.exif2.Rational;
 
 @SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
@@ -93,7 +101,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private final String TAG = this.getClass().getName(); //gets the name of the current class eg. "MyActivity".
     private static int wahrsisModelNr = 5;
     private int pictureInterval = 0;
-    private boolean sPreviewing, flagWriteExif = false, flagRealignImage = true;
+    private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
@@ -102,6 +110,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     SharedPreferences sharedPref;
     private ImageSurfaceView mImageSurfaceView;
     private Camera camera;
+    public String evState = null;
+    private String timeStamp;
+    private int pictureCounter = 0;
 
     WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
 
@@ -285,12 +296,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             //actual image file (jpg): pictureFile
             //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg eg. 2016-11-22-14-20-01-wahrsis5.jpg
             //take the current timeStamp
-            String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
 //            String ending = "temp";
-            String fileNameTemp = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
-            String fileNameRotated = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "rotated" + ".jpg";
+            Log.d(TAG, "evState: " + evState);
+            String fileName = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState + "-" + pictureCounter + ".jpg";
 
-            File pictureFileTemp = getOutputMediaFile(fileNameTemp);
+//            String fileNameTemp = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
+            String fileNameRotated = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState + "-rotated" + ".jpg";
+
+            File pictureFileTemp = getOutputMediaFile(fileName);
             File pictureFileRotated = getOutputMediaFile(fileNameRotated);
             String filePath = Environment.getExternalStorageDirectory().getPath() + "/WSI/";
 
@@ -298,7 +311,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 return;
             }
             try {
-                //write the file
                 FileOutputStream fos = new FileOutputStream(pictureFileTemp);
                 fos.write(data);
                 fos.close();
@@ -314,22 +326,27 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     fos.close();
                     Log.d(TAG, "Save successful (rotated): " + pictureFileRotated.getName());
                     Log.d(TAG, filePath + fileNameRotated);
-                    copyExif(filePath + fileNameTemp, filePath + fileNameRotated);
-                }
-
-                //write exif data
-                if(flagWriteExif) {
-                    writeExifData(filePath + pictureFileTemp.getName());
+//                    copyExif(filePath + fileNameTemp, filePath + fileNameRotated);
+                    copyExif(pictureFileTemp.getAbsolutePath(), pictureFileRotated.getAbsolutePath());
                 }
             } catch (FileNotFoundException e) {
                 Log.e(TAG, "Save falied.");
             } catch (IOException e) {
                 Log.e(TAG, "Save failed.");
             }
-            outputImage.setImageBitmap(scaleDownBitmapImage(bitmapRotated, 400, 300));
+//            outputImage.setImageBitmap(scaleDownBitmapImage(bitmapRotated, 400, 300));
             if(mImageSurfaceView.getPreviewState()) {
                 mImageSurfaceView.refreshCamera();
             }
+            flagCamReady = true;
+            pictureCounter++;
+            if(pictureCounter < 3) {
+                camera.takePicture(null, null, pictureCallback);
+            }
+            // 0 -> okay -> 1
+            // 1 -> okay -> 2
+            // 2 -> okay -> 3
+
             //outputImage.setRotation(90);
         }
     };
@@ -353,28 +370,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         File mediaFile;
         //and make a media file:
         mediaFile = new File(mediaStorageDir.getPath() + File.separator + fileName);
-
-        return mediaFile;
-    }
-
-    @Nullable //this denotes that the method might legitimately return null
-    private static File getOutputMediaFileTemp() {
-        //make a new file directory inside the "sdcard" folder
-        File mediaStorageDir = new File("/sdcard/", "WSI");
-
-        //if folder could not be created
-        if (!mediaStorageDir.exists()) {
-            if (!mediaStorageDir.mkdirs()) {
-                d("WholeSkyImager", "failed to create directory");
-                return null;
-            }
-        }
-        //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg eg. 2016-11-22-14-20-01-wahrsis5.jpg
-        //take the current timeStamp
-        String timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
-        File mediaFile;
-        //and make a media file:
-        mediaFile = new File(mediaStorageDir.getPath() + File.separator + timeStamp + "-wahrsis" + wahrsisModelNr + "-original.jpg");
 
         return mediaFile;
     }
@@ -509,7 +504,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @SuppressWarnings("deprecation")
     public void importImage(View view) throws InterruptedException {
         //do something
-        d("Button Pressed", "Image loading should be started!");
+        Log.d("Button Pressed", "Image loading should be started!");
         //check the current state before we display the screen
         Camera.Parameters params = camera.getParameters();
 
@@ -517,34 +512,57 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         int maxExposureComp = params.getMaxExposureCompensation();
         int minExposureComp = params.getMinExposureCompensation();
 
-        if (sharedPref.getBoolean("createHDR", false)) {
-            d(TAG, "HDR mode active.");
+        timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
 
-            //params.setSceneMode(Camera.Parameters.SCENE_MODE_HDR);
-            params.set("mode", "m");
-            params.set("iso", "ISO100");
 
-//            Log.d(TAG, "SeekBar Value: " + String.valueOf(evSeekbar.getProgress()));
+        params.set("mode", "m");
+        params.set("iso", "ISO100");
+
+//        camera.stopPreview();
+        evState = "low";
+        params.setExposureCompensation(minExposureComp);
+        camera.setParameters(params);
+        flagCamReady = false;
+        camera.takePicture(null, null, pictureCallback);
+//        if (sharedPref.getBoolean("createHDR", false)) {
+//            d(TAG, "HDR mode active.");
 //
-//            switch (evSeekbar.getProgress()) {
-//                case 0:
-//                    params.setExposureCompensation(minExposureComp);
-//                    break;
-//                case 1:
-//                    params.setExposureCompensation(0);
-//                    break;
-//                case 2:
-//                    params.setExposureCompensation(maxExposureComp);
-//            }
-            camera.setParameters(params);
-            d(TAG, "set ExposureCompensation to: " + params.getExposureCompensation());
-            camera.takePicture(null, null, pictureCallback);
-
-        } else {
-            params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
-            d(TAG, "HDR mode inactive.");
-            camera.takePicture(null, null, pictureCallback);
-        }
+//            //params.setSceneMode(Camera.Parameters.SCENE_MODE_HDR);
+//            params.set("mode", "m");
+//            params.set("iso", "ISO100");
+//
+////            Log.d(TAG, "SeekBar Value: " + String.valueOf(evSeekbar.getProgress()));
+////
+////            switch (evSeekbar.getProgress()) {
+////                case 0:
+////                    params.setExposureCompensation(minExposureComp);
+////                    break;
+////                case 1:
+////                    params.setExposureCompensation(0);
+////                    break;
+////                case 2:
+////                    params.setExposureCompensation(maxExposureComp);
+////            }
+//            evState = "low";
+//            params.setExposureCompensation(minExposureComp);
+//            camera.setParameters(params);
+//            camera.takePicture(null, null, pictureCallback);
+//
+////            evState = "medium";
+////            params.setExposureCompensation(0);
+////            camera.setParameters(params);
+////            camera.takePicture(null, null, pictureCallback);
+//
+////            evState = "high";
+////            params.setExposureCompensation(maxExposureComp);
+////            camera.setParameters(params);
+////            camera.takePicture(null, null, pictureCallback);
+//
+//        } else {
+//            params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
+//            d(TAG, "HDR mode inactive.");
+//            camera.takePicture(null, null, pictureCallback);
+//        }
         //camera.setParameters(params);
         //dumpParameters(params);
         //camera.takePicture(null, null, pictureCallback);
@@ -810,7 +828,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
         pictureInterval = Integer.parseInt(sharedPref.getString("picInterval", "404"));
         d(TAG, "Picture interval: " + pictureInterval + " min.");
-        flagWriteExif = sharedPref.getBoolean("extendedExif", false);
+//        flagWriteExif = sharedPref.getBoolean("extendedExif", false);
         d(TAG, "Extended exif: " + flagWriteExif);
 //        flagRealignImage = sharedPref.getBoolean("realignImage", false);
         d(TAG, "Realign image: " + flagRealignImage);
@@ -832,65 +850,87 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private void writeExifData(String filepath) {
-        try {
+//        try {
             // Save the orientation in EXIF.
-            ExifInterface exif = new ExifInterface(filepath);
-            exif.setAttribute("GPSImgDirection", Float.toString(azimuth)); //Direction in° from 0 to 359.99
-            exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, coordinatesToDMS(latitude));
-            exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, location.getLatitude() < 0 ? "S" : "N");
-            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, coordinatesToDMS(longitude));
-            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, location.getLongitude() < 0 ? "W" : "E");
-            exif.saveAttributes();
-            Log.d(TAG, "Set exif data.");
-        } catch (IOException e) {
-            Log.e(TAG, "Cannot set exif data: " + filepath);
-        }
+            ExifInterface exif = new ExifInterface();
+
+            Log.d(TAG, "filepath: " + filepath);
+//            exif.writeExif(filepath);
+
+//            exif.setAttribute(TAG_GPS_LATITUDE, coordinatesToDMS(latitude));
+//            exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, latitude < 0 ? "S" : "N");
+//            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, coordinatesToDMS(longitude));
+//            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, longitude < 0 ? "W" : "E");
+//            exif.saveAttributes();
+//            Log.d(TAG, "Set exif data.");
+//        } catch (IOException e) {
+//            Log.e(TAG, "Cannot set exif data: " + filepath);
+//        }
     }
     private void copyExif(String source, String target) {
-        ExifInterface oldExif = null, newExif = null;
+        ExifInterface oldExif = new ExifInterface();
+        ExifInterface newExif = new ExifInterface();
+
         try {
-            oldExif = new ExifInterface(source);
-            newExif = new ExifInterface(target);
+            oldExif.readExif(source,ExifInterface.Options.OPTION_ALL);
+            List<ExifTag> all_tags = oldExif.getAllTags();
+//            newExif.writeExif(source, target);
+            newExif.setExif(all_tags);
+            if (flagWriteExif) {
+                Log.d(TAG, "Compass: " + Math.round(azimuth));
+                newExif.setTagValue(TAG_GPS_IMG_DIRECTION, Math.round(azimuth));
+//                newExif.setTagValue(ExifInterface.TAG_GPS_IMG_DIRECTION, Math.round(azimuth));
+                newExif.setTagValue(ExifInterface.TAG_GPS_IMG_DIRECTION_REF, 'M');
+                newExif.setTagValue(ExifInterface.TAG_GPS_LATITUDE, coordinatesToDMS(latitude));
+                newExif.setTagValue(ExifInterface.TAG_GPS_LATITUDE_REF, latitude < 0 ? "S" : "N");
+                newExif.setTagValue(ExifInterface.TAG_GPS_LONGITUDE, coordinatesToDMS(longitude));
+                newExif.setTagValue(ExifInterface.TAG_GPS_LONGITUDE_REF, longitude < 0 ? "W" : "E");
+            }
+            newExif.writeExif(target);
+            Log.d(TAG, "Writing exif completed.");
         } catch (IOException e) {
             e.printStackTrace();
         }
-        if (oldExif.getAttribute("DateTime") != null) {
-            newExif.setAttribute("DateTime",
-                    oldExif.getAttribute("DateTime"));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_APERTURE) != null) {
-            newExif.setAttribute(ExifInterface.TAG_APERTURE,
-                    oldExif.getAttribute(ExifInterface.TAG_APERTURE));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_ISO) != null) {
-            newExif.setAttribute(ExifInterface.TAG_ISO,
-                    oldExif.getAttribute(ExifInterface.TAG_ISO));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) != null) {
-            newExif.setAttribute(ExifInterface.TAG_EXPOSURE_TIME,
-                    oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED) != null) {
-            newExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED,
-                    oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_MODEL) != null) {
-            newExif.setAttribute(ExifInterface.TAG_MODEL,
-                    oldExif.getAttribute(ExifInterface.TAG_MODEL));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_MAKE) != null) {
-            newExif.setAttribute(ExifInterface.TAG_MAKE,
-                    oldExif.getAttribute(ExifInterface.TAG_MAKE));
-        }
-        if (oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE) != null) {
-            newExif.setAttribute(ExifInterface.TAG_WHITE_BALANCE,
-                    oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
-        }
-        try {
-            newExif.saveAttributes();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+
+//
+//
+//        if (oldExif.getAttribute("DateTime") != null) {
+//            newExif.setAttribute("DateTime",
+//                    oldExif.getAttribute("DateTime"));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_APERTURE) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_APERTURE,
+//                    oldExif.getAttribute(ExifInterface.TAG_APERTURE));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_ISO) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_ISO,
+//                    oldExif.getAttribute(ExifInterface.TAG_ISO));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_EXPOSURE_TIME,
+//                    oldExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED,
+//                    oldExif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_MODEL) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_MODEL,
+//                    oldExif.getAttribute(ExifInterface.TAG_MODEL));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_MAKE) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_MAKE,
+//                    oldExif.getAttribute(ExifInterface.TAG_MAKE));
+//        }
+//        if (oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE) != null) {
+//            newExif.setAttribute(ExifInterface.TAG_WHITE_BALANCE,
+//                    oldExif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
+//        }
+//        try {
+//            newExif.saveAttributes();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
     }
 
     /**
