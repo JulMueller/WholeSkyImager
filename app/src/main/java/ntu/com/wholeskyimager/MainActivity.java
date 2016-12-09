@@ -101,7 +101,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private final String TAG = this.getClass().getName(); //gets the name of the current class eg. "MyActivity".
     private static int wahrsisModelNr = 5;
     private int pictureInterval = 0;
-    private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true;
+    private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true, flagStartImaging = false;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
@@ -209,11 +209,21 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         tvStatusInfo.setText("idle");
 
         final Handler handler = new Handler();
-        Runnable runnable = new Runnable() {
+        final Runnable runnable = new Runnable() {
             @Override
             public void run() {
                 try{
-                    if(runImaging) {
+                    if (!flagStartImaging) {
+                        Date d = new Date();
+                        d.getTime();
+                        int seconds = d.getSeconds();
+                        Log.d(TAG, "seconds: " + seconds);
+                        if (seconds == 0) {
+                            flagStartImaging = true;
+                        }
+                    }
+
+                    if(flagStartImaging && runImaging) {
                         Date d = new Date();
                         CharSequence dateTime = DateFormat.format("yyyy-MM-dd hh:mm:ss", d.getTime());
                         d(TAG, "Runnable executed. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
@@ -226,7 +236,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 finally{
                     //also call the same runnable to call it at regular interval
                 }
-                handler.postDelayed(this, pictureInterval*60*1000);
+                if (flagStartImaging && runImaging) {
+                    handler.postDelayed(this, pictureInterval * 60 * 1000);
+                }
+                else if (!flagStartImaging){
+                    //wait until full minute (eg. 12:16:00) before capturing images.
+                    handler.postDelayed(this, 1000);
+                }
             }
         };
         handler.post(runnable);
@@ -341,7 +357,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             if (mImageSurfaceView.getPreviewState()) {
                 mImageSurfaceView.refreshCamera();
             }
-            flagCamReady = true;
 
             pictureCounter++;
             if (pictureCounter < 3){
