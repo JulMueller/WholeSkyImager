@@ -110,9 +110,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     SharedPreferences sharedPref;
     private ImageSurfaceView mImageSurfaceView;
     private Camera camera;
-    public String evState = null;
+    public String[] evState = {"low","med","high"};
     private String timeStamp;
     private int pictureCounter = 0;
+    private int maxExposureComp, minExposureComp;
+    Camera.Parameters params;
 
     WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
 
@@ -297,27 +299,28 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             //naming convention: YYYY-MM-DD-HH-MM-SS-wahrsisN.jpg eg. 2016-11-22-14-20-01-wahrsis5.jpg
             //take the current timeStamp
 //            String ending = "temp";
-            Log.d(TAG, "evState: " + evState);
-            String fileName = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState + "-" + pictureCounter + ".jpg";
+            Log.d(TAG, "evState: " + evState[pictureCounter]);
+            String fileName = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + ".jpg";
 
 //            String fileNameTemp = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
-            String fileNameRotated = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState + "-rotated" + ".jpg";
+            String fileNameRotated = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + "-rotated" + ".jpg";
 
-            File pictureFileTemp = getOutputMediaFile(fileName);
+            File pictureFile = getOutputMediaFile(fileName);
+//            File pictur = getOutputMediaFile(fileName);
             File pictureFileRotated = getOutputMediaFile(fileNameRotated);
             String filePath = Environment.getExternalStorageDirectory().getPath() + "/WSI/";
 
-            if (pictureFileTemp == null) {
+            if (pictureFile == null) {
                 return;
             }
             try {
-                FileOutputStream fos = new FileOutputStream(pictureFileTemp);
+                FileOutputStream fos = new FileOutputStream(pictureFile);
                 fos.write(data);
                 fos.close();
-                Log.d(TAG, "Save successful: " + pictureFileTemp.getName());
+                Log.d(TAG, "Save successful: " + pictureFile.getName());
 //                    Toast toast = Toast.makeText(MainActivity.this, "Original picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
 //                    toast.show();
-                if(flagRealignImage) {
+                if (flagRealignImage) {
                     //rotate image according to compass direction
                     bitmapRotated = RotateBitmap(bitmap, azimuth);
                     FileOutputStream fos2 = new FileOutputStream(pictureFileRotated);
@@ -327,7 +330,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     Log.d(TAG, "Save successful (rotated): " + pictureFileRotated.getName());
                     Log.d(TAG, filePath + fileNameRotated);
 //                    copyExif(filePath + fileNameTemp, filePath + fileNameRotated);
-                    copyExif(pictureFileTemp.getAbsolutePath(), pictureFileRotated.getAbsolutePath());
+                    copyExif(pictureFile.getAbsolutePath(), pictureFileRotated.getAbsolutePath());
                 }
             } catch (FileNotFoundException e) {
                 Log.e(TAG, "Save falied.");
@@ -335,19 +338,35 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 Log.e(TAG, "Save failed.");
             }
 //            outputImage.setImageBitmap(scaleDownBitmapImage(bitmapRotated, 400, 300));
-            if(mImageSurfaceView.getPreviewState()) {
+            if (mImageSurfaceView.getPreviewState()) {
                 mImageSurfaceView.refreshCamera();
             }
             flagCamReady = true;
-            pictureCounter++;
-            if(pictureCounter < 3) {
-                camera.takePicture(null, null, pictureCallback);
-            }
-            // 0 -> okay -> 1
-            // 1 -> okay -> 2
-            // 2 -> okay -> 3
 
-            //outputImage.setRotation(90);
+            pictureCounter++;
+            if (pictureCounter < 3){
+                switch (pictureCounter) {
+                    case 1:
+                        params.setExposureCompensation(minExposureComp);
+                        camera.setParameters(params);
+                        camera.takePicture(null, null, pictureCallback);
+                        break;
+                    case 2:
+                        params.setExposureCompensation(minExposureComp);
+                        camera.setParameters(params);
+                        camera.takePicture(null, null, pictureCallback);
+                        break;
+                    case 3:
+                        params.setExposureCompensation(maxExposureComp);
+                        camera.setParameters(params);
+                        camera.takePicture(null, null, pictureCallback);
+                        break;
+                }
+            }
+            else {
+                pictureCounter = 0;
+                Log.d(TAG, "Finished taking low, med, high images. Reset counter.");
+            }
         }
     };
 
@@ -506,23 +525,18 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
         //check the current state before we display the screen
-        Camera.Parameters params = camera.getParameters();
+        params = camera.getParameters();
 
         //max value: +12, step size: exposure-compensation-step=0.166667. EV: +2
-        int maxExposureComp = params.getMaxExposureCompensation();
-        int minExposureComp = params.getMinExposureCompensation();
+        maxExposureComp = params.getMaxExposureCompensation();
+        minExposureComp = params.getMinExposureCompensation();
 
         timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
-
 
         params.set("mode", "m");
         params.set("iso", "ISO100");
 
 //        camera.stopPreview();
-        evState = "low";
-        params.setExposureCompensation(minExposureComp);
-        camera.setParameters(params);
-        flagCamReady = false;
         camera.takePicture(null, null, pictureCallback);
 //        if (sharedPref.getBoolean("createHDR", false)) {
 //            d(TAG, "HDR mode active.");
