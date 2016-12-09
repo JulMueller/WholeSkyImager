@@ -102,6 +102,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private static int wahrsisModelNr = 5;
     private int pictureInterval = 0;
     private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true, flagStartImaging = false;
+    private boolean flagUploadImages = true;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
@@ -118,7 +119,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
 
-    private boolean hdrModeOn, connectionStatus, runImaging = true;
+    private boolean hdrModeOn, connectionStatus, flagRunImaging = true;
     private int exposureCompensationValue;
     private FrameLayout cameraPreviewLayout;
 
@@ -223,10 +224,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         }
                     }
 
-                    if(flagStartImaging && runImaging) {
+                    if(flagStartImaging && flagRunImaging) {
                         Date d = new Date();
                         CharSequence dateTime = DateFormat.format("yyyy-MM-dd hh:mm:ss", d.getTime());
-                        d(TAG, "Runnable executed. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
+                        d(TAG, "Runnable execution started. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
+                        runImagingTask();
                     }
                 }
                 catch (Exception e) {
@@ -236,7 +238,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 finally{
                     //also call the same runnable to call it at regular interval
                 }
-                if (flagStartImaging && runImaging) {
+                if (flagStartImaging && flagRunImaging) {
                     handler.postDelayed(this, pictureInterval * 60 * 1000);
                 }
                 else if (!flagStartImaging){
@@ -380,6 +382,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
             else {
                 pictureCounter = 0;
+                if (serverClient.isConnected()) {
+                    //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
+                    int responseCode = serverClient.httpPOST(timeStamp, wahrsisModelNr);
+                    d(TAG, "POST execution finished. Response code: " + responseCode);
+                    if (responseCode == 201) {
+                        tvStatusInfo.setText("Image uploaded.");
+                    }
+                } else {
+                    d(TAG, "POST Execution not possible. No connection to internet.");
+                }
                 Log.d(TAG, "Finished taking low, med, high images. Reset counter.");
             }
         }
@@ -510,22 +522,45 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     /**
+     * Main method to take pictures
+     */
+    public void runImagingTask() {
+        //do something
+        Log.d("Button Pressed", "Image loading should be started!");
+        //check the current state before we display the screen
+        params = camera.getParameters();
+
+        //max value: +12, step size: exposure-compensation-step=0.166667. EV: +2
+        maxExposureComp = params.getMaxExposureCompensation();
+        minExposureComp = params.getMinExposureCompensation();
+
+        timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+
+        params.set("mode", "m");
+        params.set("iso", "ISO100");
+
+//        camera.stopPreview();
+        camera.takePicture(null, null, pictureCallback);
+        Log.d(TAG, "Pictures successfully taken and uploaded.");
+    }
+
+    /**
      * Button Method Upload Image
      */
     public void postData(View view) {
-        if (serverClient.isConnected()) {
-            Toast.makeText(this, "POST execution started.", Toast.LENGTH_LONG).show();
-            //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
-            // TODO: replace name with global name
-            int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
-            d(TAG, "POST execution finished. Response code: " + responseCode);
-            if (responseCode == 201) {
-                tvStatusInfo.setText("Image uploaded.");
-            }
-        }
-        else {
-            d(TAG, "POST Execution not possible. No connection to internet.");
-        }
+//        if (serverClient.isConnected()) {
+//            Toast.makeText(this, "POST execution started.", Toast.LENGTH_LONG).show();
+//            //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
+//            // TODO: replace name with global name
+//            int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
+//            d(TAG, "POST execution finished. Response code: " + responseCode);
+//            if (responseCode == 201) {
+//                tvStatusInfo.setText("Image uploaded.");
+//            }
+//        }
+//        else {
+//            d(TAG, "POST Execution not possible. No connection to internet.");
+//        }
         // for testing connection
 //        Toast.makeText(this, "HTTP GET execution started.", Toast.LENGTH_LONG).show();
 //        int responseCode = serverClient.httpGET();

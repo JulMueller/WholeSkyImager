@@ -61,28 +61,31 @@ public class WSIServerClient {
 
     /** POST Method
      *
-     * @param fileName
+     * @param timeStamp
      * @return Status Code
      */
-    public int httpPOST(String fileName) {
+//    public int httpPOST(String fileName) {
+    public int httpPOST(String timeStamp, int wahrsisModelNr) {
         //file management
         String filePath = Environment.getExternalStorageDirectory().getPath() + "/WSI/";
 
         //prepare files to upload (normal image, low, med, high ev photo)
-        File imageFile = new File(filePath+fileName+".jpg");
-//        File imageFileLow = new File(filePath+fileName+"-low.jpg");
-//        File imageFileMed = new File(filePath+fileName+"-med.jpg");
-//        File imageFileHigh = new File(filePath+fileName+"-high.jpg");
+//        timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + ".jpg"
+//        File imageFile = new File(filePath+timeStamp+"-wahrsis" + wahrsisModelNr + "-" + ".jpg");
+        File imageFileLow = new File(filePath+timeStamp+"-wahrsis" + wahrsisModelNr + "-low" + ".jpg");
+        File imageFileMed = new File(filePath+timeStamp+"-wahrsis" + wahrsisModelNr + "-med" + ".jpg");
+        File imageFileHigh = new File(filePath+timeStamp+"-wahrsis" + wahrsisModelNr + "-high" + ".jpg");
+//        File imageTestFile = new File(filePath+"2016-11-22-14-20-01-wahrsis5.jpg");
 
         //prepare params to organize image
         RequestParams params = new RequestParams();
         try {
-            params.put("image", imageFile);
-//            params.put("imageLow", imageFileLow);
-//            params.put("imageMed", imageFileMed);
-//            params.put("imageHigh", imageFileHigh);
+//            params.put("image", imageFile);
+            params.put("imageLow", imageFileLow);
+            params.put("imageMed", imageFileMed);
+            params.put("imageHigh", imageFileHigh);
         } catch(FileNotFoundException e) {
-            Log.d(TAG, "Could not find file " + fileName);
+            Log.d(TAG, "Could not find file " + imageFileLow + " or other (med, high).");
         }
 
         client.post(clientUrl, params, new JsonHttpResponseHandler() {
