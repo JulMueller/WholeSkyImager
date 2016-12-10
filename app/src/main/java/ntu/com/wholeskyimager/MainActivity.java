@@ -85,6 +85,7 @@ import java.util.TimerTask;
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 import static android.os.Build.VERSION_CODES.M;
 import static android.util.Log.d;
+import static cz.msebera.android.httpclient.client.methods.RequestBuilder.delete;
 import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_IMG_DIRECTION;
 import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_LATITUDE;
 import static java.lang.Math.abs;
@@ -97,12 +98,12 @@ import it.sephiroth.android.library.exif2.Rational;
 
 @SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
-
+    private boolean uploadFinished = false;
     private final String TAG = this.getClass().getName(); //gets the name of the current class eg. "MyActivity".
     private static int wahrsisModelNr = 5;
     private int pictureInterval = 0;
-    private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true, flagStartImaging = false;
-    private boolean flagUploadImages = true;
+    private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true, flagWaitForMinute = true;
+    private boolean flagUploadImages = true, flagDeleteImages = true;
     protected Button loadImage;
     protected Button startEdgeDetection;
     protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
@@ -112,14 +113,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private ImageSurfaceView mImageSurfaceView;
     private Camera camera;
     public String[] evState = {"low","med","high"};
-    private String timeStamp;
+    private String timeStampNew = null, timeStampOld = null;
     private int pictureCounter = 0;
     private int maxExposureComp, minExposureComp;
     Camera.Parameters params;
 
     WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
 
-    private boolean hdrModeOn, connectionStatus, flagRunImaging = true;
+    private boolean hdrModeOn, connectionStatus, flagRunImaging = false;
     private int exposureCompensationValue;
     private FrameLayout cameraPreviewLayout;
 
@@ -214,17 +215,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             @Override
             public void run() {
                 try{
-                    if (!flagStartImaging) {
+                    if (flagWaitForMinute) {
                         Date d = new Date();
                         d.getTime();
                         int seconds = d.getSeconds();
                         Log.d(TAG, "seconds: " + seconds);
-                        if (seconds == 0) {
-                            flagStartImaging = true;
+                        if (seconds == 0 && flagRunImaging) {
+                            flagWaitForMinute = false;
                         }
                     }
 
-                    if(flagStartImaging && flagRunImaging) {
+                    if(!flagWaitForMinute && flagRunImaging) {
                         Date d = new Date();
                         CharSequence dateTime = DateFormat.format("yyyy-MM-dd hh:mm:ss", d.getTime());
                         d(TAG, "Runnable execution started. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
@@ -238,10 +239,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 finally{
                     //also call the same runnable to call it at regular interval
                 }
-                if (flagStartImaging && flagRunImaging) {
+                if (!flagWaitForMinute && flagRunImaging) {
                     handler.postDelayed(this, pictureInterval * 60 * 1000);
                 }
-                else if (!flagStartImaging){
+                else if (flagWaitForMinute){
                     //wait until full minute (eg. 12:16:00) before capturing images.
                     handler.postDelayed(this, 1000);
                 }
@@ -318,10 +319,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             //take the current timeStamp
 //            String ending = "temp";
             Log.d(TAG, "evState: " + evState[pictureCounter]);
-            String fileName = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + ".jpg";
+            String fileName = timeStampNew + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + ".jpg";
 
-//            String fileNameTemp = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
-            String fileNameRotated = timeStamp + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + "-rotated" + ".jpg";
+//            String fileNameTemp = timeStampNew + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
+            String fileNameRotated = timeStampNew + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + "-rotated" + ".jpg";
 
             File pictureFile = getOutputMediaFile(fileName);
 //            File pictur = getOutputMediaFile(fileName);
@@ -382,17 +383,19 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
             else {
                 pictureCounter = 0;
-                if (serverClient.isConnected()) {
-                    //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
-                    int responseCode = serverClient.httpPOST(timeStamp, wahrsisModelNr);
-                    d(TAG, "POST execution finished. Response code: " + responseCode);
-                    if (responseCode == 201) {
-                        tvStatusInfo.setText("Image uploaded.");
+                if(flagUploadImages) {
+                    if (serverClient.isConnected()) {
+                        //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
+                        int responseCode = serverClient.httpPOST(timeStampNew, wahrsisModelNr);
+                        d(TAG, "POST execution finished. Response code: " + responseCode);
+                        if (responseCode == 201) {
+                            tvStatusInfo.setText("Image uploaded.");
+                        }
+                    } else {
+                        d(TAG, "POST Execution not possible. No connection to internet.");
                     }
-                } else {
-                    d(TAG, "POST Execution not possible. No connection to internet.");
+                    Log.d(TAG, "Finished taking low, med, high images. Reset counter.");
                 }
-                Log.d(TAG, "Finished taking low, med, high images. Reset counter.");
             }
         }
     };
@@ -525,6 +528,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
      * Main method to take pictures
      */
     public void runImagingTask() {
+        timeStampOld = timeStampNew;
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
         //check the current state before we display the screen
@@ -534,7 +538,21 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         maxExposureComp = params.getMaxExposureCompensation();
         minExposureComp = params.getMinExposureCompensation();
 
-        timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+        timeStampNew = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+
+        if(timeStampOld != null && flagDeleteImages) {
+            //TODO: delte all files
+            if (flagDeleteImages) {
+                String filePath = Environment.getExternalStorageDirectory().getPath() + "/WSI/";
+                File imageFileLow = new File(filePath+timeStampOld+"-wahrsis" + wahrsisModelNr + "-low" + ".jpg");
+                File imageFileMed = new File(filePath+timeStampOld+"-wahrsis" + wahrsisModelNr + "-med" + ".jpg");
+                File imageFileHigh = new File(filePath+timeStampOld+"-wahrsis" + wahrsisModelNr + "-high" + ".jpg");
+                imageFileLow.delete();
+                imageFileMed.delete();
+                boolean statusDelete = imageFileHigh.delete();
+                Log.d(TAG, "Deleting successfull: " + statusDelete);
+            }
+        }
 
         params.set("mode", "m");
         params.set("iso", "ISO100");
@@ -547,89 +565,19 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     /**
      * Button Method Upload Image
      */
-    public void postData(View view) {
-//        if (serverClient.isConnected()) {
-//            Toast.makeText(this, "POST execution started.", Toast.LENGTH_LONG).show();
-//            //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
-//            // TODO: replace name with global name
-//            int responseCode = serverClient.httpPOST("2016-11-22-14-20-01-wahrsis5");
-//            d(TAG, "POST execution finished. Response code: " + responseCode);
-//            if (responseCode == 201) {
-//                tvStatusInfo.setText("Image uploaded.");
-//            }
-//        }
-//        else {
-//            d(TAG, "POST Execution not possible. No connection to internet.");
-//        }
-        // for testing connection
-//        Toast.makeText(this, "HTTP GET execution started.", Toast.LENGTH_LONG).show();
-//        int responseCode = serverClient.httpGET();
-//        Log.d(TAG, "GET execution finished. Response corde:" + responseCode);
+    public void stopImaging(View view) {
+        flagWaitForMinute = true;
+        flagRunImaging = false;
+        Log.d(TAG, "Imaging process stopped.");
     }
 
     /**
      * Button Method Take Picture
      */
     @SuppressWarnings("deprecation")
-    public void importImage(View view) throws InterruptedException {
-        //do something
-        Log.d("Button Pressed", "Image loading should be started!");
-        //check the current state before we display the screen
-        params = camera.getParameters();
-
-        //max value: +12, step size: exposure-compensation-step=0.166667. EV: +2
-        maxExposureComp = params.getMaxExposureCompensation();
-        minExposureComp = params.getMinExposureCompensation();
-
-        timeStamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
-
-        params.set("mode", "m");
-        params.set("iso", "ISO100");
-
-//        camera.stopPreview();
-        camera.takePicture(null, null, pictureCallback);
-//        if (sharedPref.getBoolean("createHDR", false)) {
-//            d(TAG, "HDR mode active.");
-//
-//            //params.setSceneMode(Camera.Parameters.SCENE_MODE_HDR);
-//            params.set("mode", "m");
-//            params.set("iso", "ISO100");
-//
-////            Log.d(TAG, "SeekBar Value: " + String.valueOf(evSeekbar.getProgress()));
-////
-////            switch (evSeekbar.getProgress()) {
-////                case 0:
-////                    params.setExposureCompensation(minExposureComp);
-////                    break;
-////                case 1:
-////                    params.setExposureCompensation(0);
-////                    break;
-////                case 2:
-////                    params.setExposureCompensation(maxExposureComp);
-////            }
-//            evState = "low";
-//            params.setExposureCompensation(minExposureComp);
-//            camera.setParameters(params);
-//            camera.takePicture(null, null, pictureCallback);
-//
-////            evState = "medium";
-////            params.setExposureCompensation(0);
-////            camera.setParameters(params);
-////            camera.takePicture(null, null, pictureCallback);
-//
-////            evState = "high";
-////            params.setExposureCompensation(maxExposureComp);
-////            camera.setParameters(params);
-////            camera.takePicture(null, null, pictureCallback);
-//
-//        } else {
-//            params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
-//            d(TAG, "HDR mode inactive.");
-//            camera.takePicture(null, null, pictureCallback);
-//        }
-        //camera.setParameters(params);
-        //dumpParameters(params);
-        //camera.takePicture(null, null, pictureCallback);
+    public void startImaging(View view) throws InterruptedException {
+        flagRunImaging = true;
+        Log.d(TAG, "Imaging process will start soon. Runflag: " + flagRunImaging + ", waitForMinute: " + flagWaitForMinute);
     }
 
     //camera part
@@ -1014,5 +962,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         Matrix matrix = new Matrix();
         matrix.postRotate(angle);
         return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+    }
+
+    public static boolean setUploadStatus(boolean status) {
+        Log.d("WSIServerClient", "Status: " + status);
+        return status;
     }
 }

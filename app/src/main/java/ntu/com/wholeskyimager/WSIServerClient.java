@@ -21,6 +21,7 @@ import java.io.FileNotFoundException;
 import cz.msebera.android.httpclient.Header;
 
 import static android.content.ContentValues.TAG;
+import static android.os.Build.VERSION_CODES.M;
 
 /**
  * Created by Julian on 30.11.2016.
@@ -84,6 +85,7 @@ public class WSIServerClient {
             params.put("imageLow", imageFileLow);
             params.put("imageMed", imageFileMed);
             params.put("imageHigh", imageFileHigh);
+
         } catch(FileNotFoundException e) {
             Log.d(TAG, "Could not find file " + imageFileLow + " or other (med, high).");
         }
