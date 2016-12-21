@@ -49,6 +49,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.Html;
 import android.text.format.DateFormat;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -75,6 +76,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.security.Provider;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -106,7 +108,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private boolean flagUploadImages = true, flagDeleteImages = true;
     protected Button loadImage;
     protected Button startEdgeDetection;
-    protected TextView mainLabel, tvConnectionStatus, tvStatusInfo;
+    protected TextView mainLabel, tvConnectionStatus, tvStatusInfo, tvEventLog;
     protected ImageView inputImage;
     protected ImageView outputImage;
     SharedPreferences sharedPref;
@@ -118,7 +120,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private int maxExposureComp, minExposureComp;
     Camera.Parameters params;
 
-    WSIServerClient serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/");
+    private String authorizationToken;
+    WSIServerClient serverClient;
 
     private boolean hdrModeOn, connectionStatus, flagRunImaging = false;
     private int exposureCompensationValue;
@@ -162,7 +165,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         outputImage = (ImageView) findViewById(R.id.imageOutput);
         tvConnectionStatus  = (TextView) findViewById(R.id.tvConnectionStatus);
         tvStatusInfo = (TextView) findViewById(R.id.tvStatusInfo);
+        tvEventLog = (TextView) findViewById(R.id.tvEventLog);
+        tvEventLog.setMovementMethod(new ScrollingMovementMethod());
 
+        Date d2 = new Date();
+        CharSequence dateTime2 = DateFormat.format("HH:mm:ss", d2.getTime());
+        tvEventLog.append("\nTime: " + dateTime2);
         camera = checkDeviceCamera();
 
 //        mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
@@ -200,11 +208,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         //Check if OpenCV works properly
         if (!OpenCVLoader.initDebug()) {
             Log.e(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), not working.");
+            tvEventLog.append("\nOpenCVLoader.initDebug(), not working.");
+
         } else {
             d(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), working.");
+            tvEventLog.append("\nOpenCVLoader.initDebug(), working.");
         }
         // set preferences
         getWSISettings();
+
+        //not sure if this works
+        serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/", authorizationToken);
         checkNetworkStatus();
         instantiateGPS();
         instantiateSensors();
@@ -229,6 +243,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         Date d = new Date();
                         CharSequence dateTime = DateFormat.format("yyyy-MM-dd hh:mm:ss", d.getTime());
                         d(TAG, "Runnable execution started. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
+                        tvEventLog.append("\nRunnable execution started. Time: " + dateTime + ". Interval: " + pictureInterval + " min.");
                         runImagingTask();
                     }
                 }
@@ -311,6 +326,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Bitmap bitmapRotated = null;
             if (bitmap == null) {
                 Toast.makeText(MainActivity.this, "Captured image is empty", Toast.LENGTH_LONG).show();
+                tvEventLog.append("\nCaptured image is empty.");
                 return;
             }
 
@@ -337,6 +353,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 fos.write(data);
                 fos.close();
                 Log.d(TAG, "Save successful: " + pictureFile.getName());
+                tvEventLog.append("\nSave successful: " + pictureFile.getName());
 //                    Toast toast = Toast.makeText(MainActivity.this, "Original picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
 //                    toast.show();
                 if (flagRealignImage) {
@@ -352,9 +369,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     copyExif(pictureFile.getAbsolutePath(), pictureFileRotated.getAbsolutePath());
                 }
             } catch (FileNotFoundException e) {
-                Log.e(TAG, "Save falied.");
+                Log.e(TAG, "Save failed.");
+                tvEventLog.append("\nSave failed.");
             } catch (IOException e) {
                 Log.e(TAG, "Save failed.");
+                tvEventLog.append("\nSave failed.");
             }
 //            outputImage.setImageBitmap(scaleDownBitmapImage(bitmapRotated, 400, 300));
             if (mImageSurfaceView.getPreviewState()) {
@@ -467,6 +486,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             // save settings
             mCamera.setParameters(params);
             d(this.getClass().getSimpleName(), "Camera started successfully.");
+            tvEventLog.append("\nCamera started successfully.");
         } catch (Exception e) {
             e.printStackTrace(); //show error if camera can't be accessed
             Log.e(this.getClass().getSimpleName(), "Could not start camera");
@@ -531,6 +551,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         timeStampOld = timeStampNew;
         //do something
         Log.d("Button Pressed", "Image loading should be started!");
+        tvEventLog.append("\nImage loading should be started.");
         //check the current state before we display the screen
         params = camera.getParameters();
 
@@ -569,6 +590,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         flagWaitForMinute = true;
         flagRunImaging = false;
         Log.d(TAG, "Imaging process stopped.");
+        tvEventLog.append("\nImaging deactivated.");
     }
 
     /**
@@ -578,6 +600,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     public void startImaging(View view) throws InterruptedException {
         flagRunImaging = true;
         Log.d(TAG, "Imaging process will start soon. Runflag: " + flagRunImaging + ", waitForMinute: " + flagWaitForMinute);
+        tvEventLog.append("\nImaging activated.");
+
     }
 
     //camera part
@@ -644,6 +668,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         mSensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
         mSensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI);
         mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
+//        mSensorManager.registerListener(this, mSensor, 1000000);
     }
 
     @Override
@@ -748,18 +773,22 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // accelerometer sensor (for device orientation)
         if( mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null ) {
             Log.d(TAG, "Found accelerometer.");
+            tvEventLog.append("\nFound accelerometer.");
             accelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         } else {
             Log.e(TAG, "No support for accelerometer.");
+            tvEventLog.append("\nNo support for accelerometer.");
         }
 
         // magnetic sensor (for compass direction)
         if( mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null ) {
             Log.d(TAG, "Found magnetic sensor.");
+            tvEventLog.append("\nFound magnetic sensor.");
             magnetometer = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
             success = true;
         } else {
             Log.e(TAG, "No support for magnetic sensor.");
+            tvEventLog.append("\nNo support for magnetic sensor.");
         }
         return success;
     }
@@ -771,6 +800,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         boolean enabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
         if (!enabled) {
             Log.d(TAG, "GPS is not activated.");
+            tvEventLog.append("\nGPS is not activated.");
             Intent gpsSettingsIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
             startActivity(gpsSettingsIntent);
         }
@@ -783,14 +813,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 300000, 5, locationListener); //minimum interval 5 minutes, minimum distance 5 meter
         } catch (SecurityException e) {
             Log.d(TAG, "GPS access has not been granted.");
+            tvEventLog.append("\nGPS access has not been granted.");
         }
 
         // Initialize the location fields
         if (location != null) {
             Log.d(TAG, "Provider " + provider + " has been selected.");
+            tvEventLog.append("\nProvider " + provider + " has been selected.");
             success = true;
         } else {
             Log.d(TAG, "Could not find location.");
+            tvEventLog.append("\nCould not find location.");
         }
         return success;
     }
@@ -820,10 +853,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             tvConnectionStatus.setText("online");
             tvConnectionStatus.setTextColor(getResources().getColor(R.color.darkGreen));
             d(TAG, "Device is online.");
+            tvEventLog.append("\nDevice is online.");
         } else {
             tvConnectionStatus.setText("offline");
             tvConnectionStatus.setTextColor(Color.BLACK);
             d(TAG, "Device is offline.");
+            tvEventLog.append("\nDevice is offline.");
         }
     }
     /**
@@ -833,6 +868,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
 
         d(TAG, "Model No. in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
+//        tvEventLog.append("\nModel No. in pref xml: " + Integer.parseInt(sharedPref.getString("wahrsisNo", "0")));
         // Set wahrsis model number according to settings activity
         if (Integer.parseInt(sharedPref.getString("wahrsisNo", "0")) != 0) {
             wahrsisModelNr = Integer.parseInt(sharedPref.getString("wahrsisNo", "404"));
@@ -840,10 +876,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
         pictureInterval = Integer.parseInt(sharedPref.getString("picInterval", "404"));
         d(TAG, "Picture interval: " + pictureInterval + " min.");
+//        tvEventLog.append("\nPicture interval: " + pictureInterval + " min.");
 //        flagWriteExif = sharedPref.getBoolean("extendedExif", false);
         d(TAG, "Extended exif: " + flagWriteExif);
+//        tvEventLog.append("\nExtended exif: " + flagWriteExif);
 //        flagRealignImage = sharedPref.getBoolean("realignImage", false);
         d(TAG, "Realign image: " + flagRealignImage);
+//        tvEventLog.append("\nRealign image: " + flagRealignImage);
+
+        authorizationToken = sharedPref.getString("authorToken", "f26543bea24e3545a8ef9708dffd7ce5d35127e2");
+        d(TAG, "Authorization token: " + authorizationToken);
     }
 
       /**
@@ -867,8 +909,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             ExifInterface exif = new ExifInterface();
 
             Log.d(TAG, "filepath: " + filepath);
-//            exif.writeExif(filepath);
-
+//            exif.writeExif(filepath);exi
 //            exif.setAttribute(TAG_GPS_LATITUDE, coordinatesToDMS(latitude));
 //            exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, latitude < 0 ? "S" : "N");
 //            exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, coordinatesToDMS(longitude));
@@ -897,6 +938,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 newExif.setTagValue(ExifInterface.TAG_GPS_LATITUDE_REF, latitude < 0 ? "S" : "N");
                 newExif.setTagValue(ExifInterface.TAG_GPS_LONGITUDE, coordinatesToDMS(longitude));
                 newExif.setTagValue(ExifInterface.TAG_GPS_LONGITUDE_REF, longitude < 0 ? "W" : "E");
+                //newExif.setTagValue(ExifInterface.TAG_USER_COMMENT, Float.toString(roll)+","+Float.toString(pitch));
             }
             newExif.writeExif(target);
             Log.d(TAG, "Writing exif completed.");

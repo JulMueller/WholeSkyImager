@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-
-
     <PreferenceCategory android:title="General">
         <EditTextPreference
             android:defaultValue="404"
@@ -42,7 +40,7 @@
     </PreferenceCategory>
     <PreferenceCategory android:title="Network">
         <EditTextPreference
-            android:defaultValue=""
+            android:defaultValue="f26543bea24e3545a8ef9708dffd7ce5d35127e2"
             android:key="authorToken"
             android:singleLine="true"
             android:summary="Do not alter. Only for new systems. Ask Admin for Token."
@@ -72,6 +70,4 @@
             android:summary="Keep a copy of each image on the internal storage."
             android:title="Keep Files"/>
     </PreferenceCategory>
-
-
 </PreferenceScreen>
