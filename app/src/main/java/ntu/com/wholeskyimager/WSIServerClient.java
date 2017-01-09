@@ -21,7 +21,6 @@ import java.io.FileNotFoundException;
 import cz.msebera.android.httpclient.Header;
 
 import static android.content.ContentValues.TAG;
-import static android.os.Build.VERSION_CODES.M;
 
 /**
  * Created by Julian on 30.11.2016.
@@ -39,10 +38,10 @@ public class WSIServerClient {
     public WSIServerClient(Context mContext, String url, String token) {
         this.mContext = mContext;
         clientUrl = url;
-        //this enables to bypass the permission issue
+        // this enables to bypass the permission issue
         client.setSSLSocketFactory(MySSLSocketFactory.getFixedSocketFactory());
 
-        //authentication header
+        // authentication header
         client.addHeader("Authorization", "Token f26543bea24e3545a8ef9708dffd7ce5d35127e2");
 //        client.addHeader("Authorization", "Token "+ token);
         Log.d(TAG, "AsyncHttpClient succesfully created.");

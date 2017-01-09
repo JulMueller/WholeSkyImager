@@ -3,18 +3,19 @@
  * Version 0.3.0
  * added Compass / Accelerometer functionality
  */
+/**
+ * This code hase been created by Julian Mueller at the Nanyang Technological University, Singapore
+ * as part of the Bachelor's Degree in Electrical Engineering.
+ * Contact: jul.mueller@gmx.ch
+ */
 package ntu.com.wholeskyimager;
 
-import android.Manifest;
-import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -28,22 +29,17 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.location.Criteria;
-import android.location.GpsStatus;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-//import android.media.ExifInterface;
-import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.CountDownTimer;
 import android.os.Environment;
 import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.annotation.Nullable;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -56,12 +52,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.SeekBar;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -76,27 +68,17 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.security.Provider;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
-
-import static android.Manifest.permission.ACCESS_FINE_LOCATION;
-import static android.os.Build.VERSION_CODES.M;
-import static android.util.Log.d;
-import static cz.msebera.android.httpclient.client.methods.RequestBuilder.delete;
-import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_IMG_DIRECTION;
-import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_LATITUDE;
-import static java.lang.Math.abs;
 
 import it.sephiroth.android.library.exif2.ExifInterface;
 import it.sephiroth.android.library.exif2.ExifTag;
-import it.sephiroth.android.library.exif2.ExifUtil;
-import it.sephiroth.android.library.exif2.IfdId;
-import it.sephiroth.android.library.exif2.Rational;
+
+import static android.util.Log.d;
+import static it.sephiroth.android.library.exif2.ExifInterface.TAG_GPS_IMG_DIRECTION;
+
+//import android.media.ExifInterface;
 
 @SuppressWarnings("deprecation")
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
@@ -106,10 +88,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private int pictureInterval = 0;
     private boolean sPreviewing, flagWriteExif = true, flagRealignImage = false, flagCamReady = true, flagWaitForMinute = true;
     private boolean flagUploadImages = true, flagDeleteImages = true;
-    protected Button loadImage;
-    protected Button startEdgeDetection;
     protected TextView mainLabel, tvConnectionStatus, tvStatusInfo, tvEventLog;
-    protected ImageView inputImage;
     protected ImageView outputImage;
     SharedPreferences sharedPref;
     private ImageSurfaceView mImageSurfaceView;
@@ -120,6 +99,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private int maxExposureComp, minExposureComp;
     Camera.Parameters params;
 
+    public static final String MWSIPreferences = "MyPrefs" ;
     private String authorizationToken;
     WSIServerClient serverClient;
 
@@ -132,10 +112,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Sensor mSensor;
     private Sensor magnetometer;
     private Sensor accelerometer;
-    private float currentDegree = 0f;
-    private final static float THRESHOLD_ACCX = 0.08f;
-    private final static float THRESHOLD_ACCY = 0.08f;
-    private final static float THRESHOLD_ACCZ = 9.79f;
     private float[] mGravity;
     private float[] mGeomagnetic;
     private float azimuth;
@@ -173,7 +149,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         tvEventLog.append("\nTime: " + dateTime2);
         camera = checkDeviceCamera();
 
-//        mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
         mImageSurfaceView = new ImageSurfaceView(MainActivity.this, camera);
         cameraPreviewLayout = (FrameLayout) findViewById(R.id.camera_preview);
         cameraPreviewLayout.addView(mImageSurfaceView);
@@ -192,20 +167,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 .setContentIntent(pIntent)
                 .setAutoCancel(true).build();
 
-        //enable notification
-//        notificationManager.notify(0, notificationUploadStarted);
-//        notificationManager.cancelAll();
-
-        /*
-        double horAngle =  getHVA();
-        double vertAngle = getVVA();
-        String horAngleS = String.valueOf(horAngle);
-        String vertAngleS = String.valueOf(vertAngle);
-        Log.e("Camera horAngle: ", horAngleS);
-        Log.e("Camera vertAngle: ", vertAngleS);
-        */
-
-        //Check if OpenCV works properly
+        // Check if OpenCV works properly
         if (!OpenCVLoader.initDebug()) {
             Log.e(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), not working.");
             tvEventLog.append("\nOpenCVLoader.initDebug(), not working.");
@@ -214,10 +176,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             d(this.getClass().getSimpleName(), "  OpenCVLoader.initDebug(), working.");
             tvEventLog.append("\nOpenCVLoader.initDebug(), working.");
         }
-        // set preferences
+
+        // fetch and set settings
         getWSISettings();
 
-        //not sure if this works
+        // initiate server client
         serverClient = new WSIServerClient(this, "https://www.visuo.adsc.com.sg/api/skypicture/", authorizationToken);
         checkNetworkStatus();
         instantiateGPS();
@@ -278,8 +241,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return true;
     }
 
-    //get picture data (no writing)
-
+    // get picture data (no writing)
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here. The action bar will
@@ -310,13 +272,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 return true;
 
             default:
-                // If we got here, the user's action was not recognized.
-                // Invoke the superclass to handle it.
                 return super.onOptionsItemSelected(item);
         }
     }
 
-    //Picture Callback Method
+    // Picture Callback Method
     PictureCallback pictureCallback = new PictureCallback() {
         @Override
         //action if picture is taken
@@ -336,12 +296,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 //            String ending = "temp";
             Log.d(TAG, "evState: " + evState[pictureCounter]);
             String fileName = timeStampNew + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + ".jpg";
-
-//            String fileNameTemp = timeStampNew + "-wahrsis" + wahrsisModelNr + "-" + "temp" + ".jpg";
             String fileNameRotated = timeStampNew + "-wahrsis" + wahrsisModelNr + "-" + evState[pictureCounter] + "-rotated" + ".jpg";
 
             File pictureFile = getOutputMediaFile(fileName);
-//            File pictur = getOutputMediaFile(fileName);
             File pictureFileRotated = getOutputMediaFile(fileNameRotated);
             String filePath = Environment.getExternalStorageDirectory().getPath() + "/WSI/";
 
@@ -361,11 +318,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     bitmapRotated = RotateBitmap(bitmap, azimuth);
                     FileOutputStream fos2 = new FileOutputStream(pictureFileRotated);
                     bitmapRotated.compress(Bitmap.CompressFormat.JPEG, 100, fos2);
-                    //write the file
+                    // write the file
                     fos.close();
                     Log.d(TAG, "Save successful (rotated): " + pictureFileRotated.getName());
                     Log.d(TAG, filePath + fileNameRotated);
-//                    copyExif(filePath + fileNameTemp, filePath + fileNameRotated);
                     copyExif(pictureFile.getAbsolutePath(), pictureFileRotated.getAbsolutePath());
                 }
             } catch (FileNotFoundException e) {
@@ -375,7 +331,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 Log.e(TAG, "Save failed.");
                 tvEventLog.append("\nSave failed.");
             }
-//            outputImage.setImageBitmap(scaleDownBitmapImage(bitmapRotated, 400, 300));
             if (mImageSurfaceView.getPreviewState()) {
                 mImageSurfaceView.refreshCamera();
             }
@@ -404,7 +359,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 pictureCounter = 0;
                 if(flagUploadImages) {
                     if (serverClient.isConnected()) {
-                        //post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
+                        // post image series (Low, Med, High EV) to specific URL and receive HTTP Status Code
                         int responseCode = serverClient.httpPOST(timeStampNew, wahrsisModelNr);
                         d(TAG, "POST execution finished. Response code: " + responseCode);
                         if (responseCode == 201) {
@@ -419,12 +374,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
     };
 
-    @Nullable //this denotes that the method might legitimately return null
+    @Nullable // this denotes that the method might legitimately return null
     private static File getOutputMediaFile(String fileName) {
-        //make a new file directory inside the "sdcard" folder
+        // make a new file directory inside the "sdcard" folder
         File mediaStorageDir = new File("/sdcard/", "WSI");
 
-        //if folder could not be created
+        // if folder could not be created
         if (!mediaStorageDir.exists()) {
             if (!mediaStorageDir.mkdirs()) {
                 d("WholeSkyImager", "failed to create directory");
@@ -443,8 +398,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
 
-    //check if cam is available and use back facing camera
-
+    // check if camera is available and use back facing camera
     /**
      * Check avaiablity of camera
      *
@@ -479,7 +433,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             params.setSceneMode(Camera.Parameters.SCENE_MODE_HDR);
             params.setRotation(90);
             params.setJpegQuality(100);
-            // TODO: find Balance modes
             params.setWhiteBalance(Camera.Parameters.WHITE_BALANCE_AUTO);
             params.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
 
@@ -687,39 +640,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
             mGeomagnetic = sensorEvent.values;
 
-        //process level information
-        if (mySensor.getType() == Sensor.TYPE_GRAVITY){
-            float x = sensorEvent.values[0];
-            float y = sensorEvent.values[1];
-            float z = sensorEvent.values[2];
-
-            x = Math.round(x * 1000f) / 1000f;
-            y = Math.round(y * 1000f) / 1000f;
-            z = Math.round(z * 1000f) / 1000f;
-//            textAX.setText(Float.toString(x));
-//            textAY.setText(Float.toString(y));
-//            textAZ.setText(Float.toString(z));
-            if (abs(z) >= THRESHOLD_ACCZ) {
-//                textAZ.setTextColor(Color.GREEN);
-            }
-            else {
-//                textAZ.setTextColor(Color.RED);
-            }
-            if (abs(x) <= THRESHOLD_ACCX) {
-//                textAX.setTextColor(Color.GREEN);
-            }
-            else {
-//                textAX.setTextColor(Color.RED);
-            }
-            if (abs(y) <= THRESHOLD_ACCY) {
-//                textAY.setTextColor(Color.GREEN);
-            }
-            else {
-//                textAY.setTextColor(Color.RED);
-            }
-        }
-
-        //calculate heading
+        // calculate heading
         if (mGravity != null && mGeomagnetic != null) {
             float R[] = new float[9];
             float I[] = new float[9];
